@@ -1,0 +1,20 @@
+# Dipendenze
+node_modules/
+
+# Build
+dist/
+
+# Dati locali: database, profilo browser (sessione LinkedIn), CSV caricati, screenshot
+data/
+
+# Ambiente
+.env
+
+# Log
+*.log
+
+# macOS
+.DS_Store
+
+# Claude Code: impostazioni locali per-macchina (launch.json invece resta tracciato)
+.claude/settings.local.json
