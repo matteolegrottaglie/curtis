@@ -20,6 +20,24 @@ export interface LoginOutcome {
   waited_seconds: number;
 }
 
+/**
+ * Riporta il browser in background dopo il login, così non resta una
+ * finestra aperta sullo schermo. Se per qualunque motivo la sessione non
+ * sopravvivesse al riavvio del contesto, si ripristina la finestra
+ * visibile: meglio una finestra di troppo che un login perso.
+ */
+async function hideWindow(engine: Engine): Promise<boolean> {
+  if (!engine.session.visible) return false;
+  try {
+    await engine.session.ensureMode(false);
+    if (await engine.session.hasAuthCookie()) return true;
+    await engine.session.ensureMode(true);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export async function authStatus(engine: Engine): Promise<AuthStatus> {
   return engine.authStatus();
 }
@@ -79,11 +97,14 @@ export async function login(
     await sleep(3000);
     const st = await engine.authStatus();
     if (st.loggedIn) {
+      const hidden = await hideWindow(engine);
       return {
         status: 'connected',
         account: st.account,
         logged_in: true,
-        message: `Login completato come ${st.account ?? 'account LinkedIn'}. La sessione resta salvata: non dovrai rifarlo.`,
+        message:
+          `Login completato come ${st.account ?? 'account LinkedIn'}. La sessione resta salvata: non dovrai rifarlo.` +
+          (hidden ? ' La finestra del browser è stata chiusa: da qui in poi lavora in background.' : ''),
         waited_seconds: Math.round((Date.now() - started) / 1000),
       };
     }

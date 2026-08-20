@@ -80,7 +80,8 @@ export interface AppConfig {
   port: number;
   dataDir: string;
   timezone: string;
-  headful: boolean;
+  /** Mostra la finestra del browser durante il lavoro (login a parte). */
+  visibleBrowser: boolean;
   browserChannel: string | undefined;
   autoConnect: boolean;
   autostartEngine: boolean;
@@ -93,7 +94,10 @@ export const appConfig: AppConfig = {
   port: Number(process.env.LKSQ_PORT ?? 4311),
   dataDir: DATA_DIR,
   timezone: process.env.TIMEZONE ?? 'Europe/Rome',
-  headful: (process.env.HEADFUL ?? 'true') !== 'false',
+  // Default: il browser lavora in background. La finestra si apre solo per
+  // il login, dove l'utente deve poter digitare. Con HEADFUL=true resta
+  // visibile sempre (utile per capire perché un selettore non aggancia).
+  visibleBrowser: (process.env.HEADFUL ?? 'false') === 'true',
   browserChannel: resolveBrowserChannel(),
   autoConnect: (process.env.AUTO_CONNECT ?? 'true') !== 'false',
   autostartEngine: (process.env.AUTOSTART_ENGINE ?? 'false') === 'true',
@@ -104,6 +108,7 @@ export const paths = {
   db: join(DATA_DIR, 'sequencer.db'),
   browserProfile: join(DATA_DIR, 'browser-profile'),
   screenshots: join(DATA_DIR, 'screenshots'),
+  browserHints: join(DATA_DIR, 'browser-hints.json'),
   token: join(DATA_DIR, 'token'),
   pid: join(DATA_DIR, 'daemon.pid'),
   logFile: join(DATA_DIR, 'daemon.log'),

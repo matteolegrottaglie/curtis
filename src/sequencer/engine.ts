@@ -134,6 +134,8 @@ export class Engine {
     repo.saveControllerState(st);
 
     this.breakThreshold = nextBreakThreshold(cfg);
+    // Se il login aveva aperto la finestra, qui si torna in background:
+    // durante il lavoro non deve comparire nulla sullo schermo dell'utente.
     await this.session.launch();
     emitEvent('status', this.status());
     this.loopHandle = this.loop();
@@ -185,7 +187,7 @@ export class Engine {
         error: 'engine_running',
       };
     }
-    await this.session.launch();
+    await this.session.launch({ visible: true });
     await this.session.gotoLogin();
     return this.authStatus();
   }

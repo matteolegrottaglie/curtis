@@ -114,6 +114,8 @@ bearer_token_env_var = "LKSQ_TOKEN"
 > «accedi a LinkedIn»
 
 Si apre una finestra di Chrome sulla pagina di login: accedi normalmente, anche con Google e 2FA.
+È l'unico momento in cui vedi il browser — appena sei dentro, la finestra si chiude e da lì in
+poi il tool lavora in background.
 Il tool non vede né salva la password — conserva solo la sessione del browser, in locale.
 Dalle volte successive risulti già connesso.
 
@@ -137,6 +139,27 @@ azioni, e solo dentro la finestra oraria (default lun–ven 9–18). **La lentez
 raffiche e attività notturna sono i segnali di bot più facili da rilevare. Una lista di 200
 contatti richiede settimane, non ore.
 
+### Il browser non si vede
+
+Il tool lavora in background: nessuna finestra che compare o si muove mentre stai facendo
+altro. L'unica volta che vedi Chrome è il login, perché le credenziali le digiti tu.
+
+Non è il vecchio headless facilmente rilevabile, ed è una differenza che vale la pena spiegare
+perché è la scelta tecnica su cui si regge tutto:
+
+- gira il **Chrome di sistema**, non un Chromium di automazione — il renderer WebGL riportato è
+  quello vero della tua GPU
+- lo **User-Agent viene ripulito** dalla stringa `Headless`, header HTTP e client hints inclusi
+- i valori del **display reale** (profondità colore) vengono osservati durante il login e
+  riprodotti in background
+
+Misurato sui segnali che un anti-bot guarda per primi — `navigator.webdriver`, plugin, lingue,
+User-Agent, client hints, renderer WebGL, profondità colore, dimensioni finestra — dopo il primo
+login il fingerprint in background è **identico** a quello a finestra aperta.
+
+Se vuoi comunque vedere cosa fa, `HEADFUL=true` riapre la finestra: serve soprattutto quando un
+selettore smette di funzionare e vuoi guardare la pagina con i tuoi occhi.
+
 ## Far avanzare le campagne a client chiuso
 
 Le sequenze durano giorni (attesa di accettazione, rampa di warm-up). Perché avanzino anche
@@ -147,8 +170,8 @@ lksq service install
 ```
 
 Su macOS crea un LaunchAgent, su Linux una systemd user unit. Il servizio avvia anche il motore
-all'accesso: si aprirà una finestra del browser e le campagne procederanno da sole, sempre dentro
-finestra oraria, rampa e tetti. Con `--no-autostart` tiene acceso solo il server MCP.
+all'accesso, e le campagne procedono da sole in background, sempre dentro finestra oraria, rampa
+e tetti. Con `--no-autostart` tiene acceso solo il server MCP.
 
 ```bash
 lksq service uninstall   # per tornare indietro

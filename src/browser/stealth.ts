@@ -10,6 +10,11 @@
 // ============================================================
 import type { BrowserContext } from 'playwright';
 
+/** Valori del display reale da riprodurre quando si lavora in background. */
+export interface DisplayHints {
+  colorDepth: number;
+}
+
 function stealthInit(): void {
   // navigator.webdriver -> undefined (il tell numero 1)
   Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -44,6 +49,18 @@ function stealthInit(): void {
   }
 }
 
-export async function applyStealth(context: BrowserContext): Promise<void> {
+/**
+ * In background `screen.colorDepth` scende a 24, mentre un Mac con display
+ * wide-gamut ne riporta 30: è l'ultima differenza misurabile rispetto alla
+ * finestra visibile (UA e dimensioni sono già allineati altrove). Si
+ * riproduce il valore osservato sul display vero, catturato durante il login.
+ */
+function displayInit(depth: number): void {
+  Object.defineProperty(screen, 'colorDepth', { get: () => depth });
+  Object.defineProperty(screen, 'pixelDepth', { get: () => depth });
+}
+
+export async function applyStealth(context: BrowserContext, hints?: DisplayHints): Promise<void> {
   await context.addInitScript(stealthInit);
+  if (hints) await context.addInitScript(displayInit, hints.colorDepth);
 }

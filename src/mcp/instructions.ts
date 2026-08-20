@@ -18,7 +18,9 @@ Se l'utente chiede di alzare i limiti, dillo chiaramente prima di farlo.
 ## Ordine delle operazioni
 1. \`linkedin_auth_status\` — sempre per primo. Senza sessione niente funziona.
 2. Se non connesso: \`linkedin_login\`. Apre una finestra del browser; avvisa l'utente
-   che deve guardarla e accedere a mano (anche con Google o 2FA). Si fa una volta sola.
+   che deve guardarla e accedere a mano (anche con Google o 2FA). Si fa una volta sola,
+   ed è l'unico momento in cui il browser è visibile: finito il login si chiude e da lì
+   in poi il tool lavora in background, senza finestre sullo schermo.
 3. \`import_contacts\` con il percorso del CSV o il contenuto incollato → ottieni un \`import_id\`.
 4. \`create_campaign\` (poi \`enroll_contacts\` e \`set_campaign_status\` a "running"),
    oppure \`start_connection_campaign\` che fa import + campagna + iscrizione + avvio in una chiamata.

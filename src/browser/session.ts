@@ -2,12 +2,17 @@
 //  Sessione browser persistente.
 //  - Profilo Chrome reale su disco (la sessione LinkedIn resta
 //    salvata: login una sola volta, niente token/cookie in chiaro).
-//  - Headed di default (headless è molto più rilevabile).
+//  - In BACKGROUND di default: nessuna finestra che si muove sullo
+//    schermo dell'utente. La finestra si apre solo per il login.
+//    Non è il vecchio "headless facilmente rilevabile": si usa il Chrome
+//    di sistema, si riscrive lo User-Agent per togliere "Headless" e si
+//    riproducono i valori del display reale (vedi stealth.ts). Misurato:
+//    l'unica differenza residua dal browser visibile era colorDepth.
 //  - Login MANUALE (incluso 2FA/checkpoint): non gestiamo password.
 // ============================================================
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { appConfig, paths } from '../config.js';
 import { applyStealth } from './stealth.js';
 import { log } from '../util/log.js';
@@ -17,31 +22,133 @@ import { randInt } from '../util/rand.js';
 const FEED_URL = 'https://www.linkedin.com/feed/';
 const LOGIN_URL = 'https://www.linkedin.com/login';
 
+/** Valori autentici osservati a finestra aperta, riusati poi in background. */
+interface BrowserHints {
+  userAgent?: string;
+  colorDepth?: number;
+}
+
+function readHints(): BrowserHints {
+  try {
+    return JSON.parse(readFileSync(paths.browserHints, 'utf8')) as BrowserHints;
+  } catch {
+    return {};
+  }
+}
+
+function writeHints(patch: BrowserHints): void {
+  try {
+    writeFileSync(paths.browserHints, JSON.stringify({ ...readHints(), ...patch }, null, 2));
+  } catch {
+    // best effort: senza cache si ricalcola al prossimo avvio
+  }
+}
+
 export class LinkedInSession {
   context: BrowserContext | null = null;
   page: Page | null = null;
+  #visible = false;
 
-  async launch(): Promise<void> {
-    if (this.context) return;
+  /** La finestra del browser è attualmente visibile all'utente? */
+  get visible(): boolean {
+    return this.#visible;
+  }
+
+  /**
+   * Avvia il browser nella modalità richiesta.
+   *
+   * Cambiare modalità richiede di riavviare il contesto: una finestra già
+   * aperta non si può nascondere. Portarla fuori schermo con
+   * `--window-position` non funziona su macOS — il window server la riporta
+   * a bordo schermo (verificato: torna a x:0, y:30).
+   */
+  async launch(opts: { visible?: boolean } = {}): Promise<void> {
+    const visible = opts.visible ?? appConfig.visibleBrowser;
+    if (this.context) {
+      if (this.#visible === visible) return;
+      await this.close();
+    }
+    await this.#open(visible);
+  }
+
+  /** Porta il browser nella modalità richiesta, riavviandolo se necessario. */
+  async ensureMode(visible: boolean): Promise<void> {
+    await this.launch({ visible });
+  }
+
+  async #open(visible: boolean, userAgentOverride?: string): Promise<void> {
     const userDataDir = paths.browserProfile;
     mkdirSync(userDataDir, { recursive: true });
+    const hints = readHints();
+    const ua = userAgentOverride ?? (visible ? undefined : hints.userAgent);
 
     this.context = await chromium.launchPersistentContext(userDataDir, {
-      headless: !appConfig.headful,
+      headless: !visible,
       channel: appConfig.browserChannel, // 'chrome' o undefined (chromium incluso)
       viewport: { width: 1440, height: 900 },
       locale: 'it-IT',
       timezoneId: appConfig.timezone,
+      ...(ua ? { userAgent: ua } : {}),
       args: [
         '--disable-blink-features=AutomationControlled',
-        '--start-maximized',
+        // Senza questo, in background outerWidth non combacia col viewport.
+        '--window-size=1440,900',
+        ...(visible
+          ? ['--start-maximized']
+          : [
+              // Chrome rallenta timer e rendering delle finestre non visibili:
+              // significherebbe azioni che scadono a metà sequenza.
+              '--disable-backgrounding-occluded-windows',
+              '--disable-renderer-backgrounding',
+              '--disable-background-timer-throttling',
+            ]),
       ],
     });
-    await applyStealth(this.context);
+    await applyStealth(
+      this.context,
+      !visible && hints.colorDepth !== undefined ? { colorDepth: hints.colorDepth } : undefined,
+    );
 
     const pages = this.context.pages();
     this.page = pages.length > 0 ? pages[0]! : await this.context.newPage();
-    log.info({ channel: appConfig.browserChannel ?? 'chromium', headful: appConfig.headful }, 'browser avviato');
+    this.#visible = visible;
+
+    if (visible) {
+      // Finestra vera: unico momento in cui si possono osservare i valori
+      // autentici di display e User-Agent, da riusare poi in background.
+      await this.#captureHints();
+    } else if (!userAgentOverride) {
+      // Cache assente o invecchiata (Chrome aggiornato): si ricava lo UA
+      // corretto e si riapre una volta sola.
+      const actual = await this.page.evaluate(() => navigator.userAgent).catch(() => '');
+      if (/Headless/i.test(actual)) {
+        const fixed = actual.replace(/HeadlessChrome/gi, 'Chrome');
+        writeHints({ userAgent: fixed });
+        await this.close();
+        await this.#open(false, fixed);
+        return;
+      }
+    }
+
+    log.info(
+      {
+        channel: appConfig.browserChannel ?? 'chromium',
+        modalita: visible ? 'finestra visibile' : 'background',
+      },
+      'browser avviato',
+    );
+  }
+
+  /** Registra i valori autentici del browser visibile, per usarli in background. */
+  async #captureHints(): Promise<void> {
+    const observed = await this.page
+      ?.evaluate(() => ({ userAgent: navigator.userAgent, colorDepth: screen.colorDepth }))
+      .catch(() => null);
+    if (!observed) return;
+    writeHints({
+      userAgent: observed.userAgent.replace(/HeadlessChrome/gi, 'Chrome'),
+      colorDepth: observed.colorDepth,
+    });
   }
 
   private requirePage(): Page {
@@ -179,5 +286,6 @@ export class LinkedInSession {
     await this.context?.close().catch(() => {});
     this.context = null;
     this.page = null;
+    this.#visible = false;
   }
 }
