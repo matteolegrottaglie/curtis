@@ -47,6 +47,34 @@ function loadDotEnv(dir: string): void {
 }
 loadDotEnv(DATA_DIR);
 
+/** Percorsi in cui cercare un Google Chrome installato dal sistema. */
+const SYSTEM_CHROME_PATHS: Record<string, string[]> = {
+  darwin: ['/Applications/Google Chrome.app'],
+  linux: ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/opt/google/chrome/chrome'],
+  win32: [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ],
+};
+
+/**
+ * Quale browser far pilotare a Playwright.
+ *
+ * Senza scelta esplicita si preferisce il **Chrome di sistema**, quando c'è:
+ * il Chromium incluso in Playwright va scaricato a parte con
+ * `playwright install`, e un'installazione fresca non ce l'ha — il primo
+ * login fallirebbe con un errore incomprensibile pur avendo Chrome sul Mac.
+ * Il Chrome vero ha anche un fingerprint più autentico.
+ *
+ * `BROWSER_CHANNEL=chromium` forza comunque quello di Playwright.
+ */
+function resolveBrowserChannel(): string | undefined {
+  const explicit = process.env.BROWSER_CHANNEL?.trim();
+  if (explicit) return explicit === 'chromium' ? undefined : explicit;
+  const candidates = SYSTEM_CHROME_PATHS[process.platform] ?? [];
+  return candidates.some((p) => existsSync(p)) ? 'chrome' : undefined;
+}
+
 export interface AppConfig {
   host: string;
   port: number;
@@ -66,7 +94,7 @@ export const appConfig: AppConfig = {
   dataDir: DATA_DIR,
   timezone: process.env.TIMEZONE ?? 'Europe/Rome',
   headful: (process.env.HEADFUL ?? 'true') !== 'false',
-  browserChannel: process.env.BROWSER_CHANNEL?.trim() || undefined,
+  browserChannel: resolveBrowserChannel(),
   autoConnect: (process.env.AUTO_CONNECT ?? 'true') !== 'false',
   autostartEngine: (process.env.AUTOSTART_ENGINE ?? 'false') === 'true',
 };

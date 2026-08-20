@@ -123,9 +123,9 @@ async function cmdSetup(args: string[]): Promise<void> {
   if (browser.ok) {
     console.log(`${green('✓')} Browser: ${browser.detail}`);
   } else {
-    console.log(`${yellow('!')} Browser non trovato: ${browser.detail}`);
+    console.log(`${yellow('!')} Browser: ${browser.detail}`);
     console.log(`  Installa Google Chrome, oppure scarica il Chromium di Playwright:`);
-    console.log(`    ${bold('npx playwright install chromium')}`);
+    console.log(`    ${bold(browser.fix ?? 'npx playwright install chromium')}`);
   }
 
   console.log(`\n${bold('Prossimi passi')}`);
@@ -136,21 +136,29 @@ async function cmdSetup(args: string[]): Promise<void> {
   console.log(dim(`  Per far avanzare le campagne anche a client chiuso: lksq service install\n`));
 }
 
-async function detectBrowser(): Promise<{ ok: boolean; detail: string }> {
-  if (process.platform === 'darwin' && existsSync('/Applications/Google Chrome.app')) {
+/**
+ * Verifica il browser che verrà DAVVERO usato, non uno qualsiasi presente
+ * sul sistema: `lksq doctor` deve fallire qui, non al primo login.
+ */
+async function detectBrowser(): Promise<{ ok: boolean; detail: string; fix?: string }> {
+  if (appConfig.browserChannel === 'chrome') {
     return { ok: true, detail: 'Google Chrome di sistema' };
   }
-  for (const p of ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser']) {
-    if (existsSync(p)) return { ok: true, detail: p };
+  if (appConfig.browserChannel) {
+    return { ok: true, detail: `canale "${appConfig.browserChannel}" (da BROWSER_CHANNEL)` };
   }
   try {
     const { chromium } = await import('playwright');
     const exe = chromium.executablePath();
     if (exe && existsSync(exe)) return { ok: true, detail: `Chromium di Playwright (${exe})` };
   } catch {
-    // playwright non ha ancora scaricato il browser
+    // playwright non riesce a risolvere il percorso: trattalo come mancante
   }
-  return { ok: false, detail: 'né Google Chrome né il Chromium di Playwright' };
+  return {
+    ok: false,
+    detail: 'nessun browser utilizzabile — Chrome non è installato e il Chromium di Playwright non è stato scaricato',
+    fix: 'npx playwright install chromium',
+  };
 }
 
 async function cmdStart(): Promise<void> {
@@ -348,7 +356,11 @@ async function cmdDoctor(): Promise<void> {
   }
 
   const browser = await detectBrowser();
-  checks.push({ label: 'Browser', ok: browser.ok, detail: browser.detail });
+  checks.push({
+    label: 'Browser',
+    ok: browser.ok,
+    detail: browser.detail + (browser.fix ? ` → ${browser.fix}` : ''),
+  });
 
   checks.push({
     label: 'Sessione LinkedIn',
