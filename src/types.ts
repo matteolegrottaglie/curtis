@@ -1,20 +1,20 @@
 // ============================================================
-//  Tipi condivisi in tutta l'app
+//  Types shared across the whole app
 // ============================================================
 
-// ---- Azioni eseguibili (loggate nella tabella `actions`) ----
+// ---- Executable actions (logged in the `actions` table) ----
 export type ActionKind =
-  | 'visit' // visita profilo
-  | 'connect' // richiesta di collegamento
-  | 'message' // messaggio (richiede 1° grado)
-  | 'follow' // segui persona
-  | 'like' // metti like a un post recente
-  | 'withdraw' // ritira invito pendente
-  | 'check_accepted'; // verifica se l'invito è stato accettato
+  | 'visit' // profile visit
+  | 'connect' // connection request
+  | 'message' // message (requires 1st degree)
+  | 'follow' // follow a person
+  | 'like' // like a recent post
+  | 'withdraw' // withdraw a pending invite
+  | 'check_accepted'; // check whether the invite was accepted
 
 export type ActionStatus = 'success' | 'failed' | 'skipped' | 'blocked';
 
-// ---- Step di una sequenza (campaign.steps) ----
+// ---- Step of a sequence (campaign.steps) ----
 export type Step =
   | { type: 'visit' }
   | { type: 'connect'; note?: string }
@@ -26,65 +26,65 @@ export type Step =
 
 export type StepType = Step['type'];
 
-// ---- Stato di un contatto dentro una campagna (macchina a stati) ----
+// ---- State of a contact inside a campaign (state machine) ----
 export type EnrollmentStatus =
-  | 'enrolled' // appena inserito, non ancora partito
-  | 'in_progress' // sta percorrendo gli step
-  | 'connect_sent' // invito inviato, in attesa
-  | 'accepted' // invito accettato
-  | 'completed' // sequenza terminata
-  | 'stopped' // fermato manualmente
-  | 'failed' // errore irrecuperabile
-  | 'not_accepted'; // scaduto il tempo di attesa accettazione
+  | 'enrolled' // just added, not started yet
+  | 'in_progress' // working through the steps
+  | 'connect_sent' // invite sent, waiting
+  | 'accepted' // invite accepted
+  | 'completed' // sequence finished
+  | 'stopped' // stopped manually
+  | 'failed' // unrecoverable error
+  | 'not_accepted'; // the acceptance wait window expired
 
 export type CampaignStatus = 'draft' | 'running' | 'paused' | 'archived';
 
-// ---- Segnali di salute rilevati da LinkedIn ----
+// ---- Health signals picked up from LinkedIn ----
 export type SignalKind =
-  | 'weekly_limit' // "hai raggiunto il limite settimanale di inviti"
-  | 'captcha' // challenge/verifica
-  | 'restriction' // account limitato/sospeso
-  | 'warning' // banner generico di avviso
-  | 'error'; // errore tecnico ripetuto
+  | 'weekly_limit' // "you've reached the weekly invitation limit"
+  | 'captcha' // challenge/verification
+  | 'restriction' // account restricted/suspended
+  | 'warning' // generic warning banner
+  | 'error'; // repeated technical error
 
 // ============================================================
-//  Configurazione di sicurezza (modificabile da dashboard)
+//  Safety configuration (editable from the dashboard)
 // ============================================================
 
 export interface RampStep {
-  week: number; // settimana di warm-up (1-based)
-  dailyInvites: number; // target inviti/giorno in quella settimana
+  week: number; // warm-up week (1-based)
+  dailyInvites: number; // target invites/day for that week
 }
 
 export interface SafetyConfig {
-  // --- finestra oraria ---
+  // --- time window ---
   timezone: string;
-  workingDays: number[]; // 1=lun ... 7=dom (weekday luxon)
-  workStartHour: number; // ora locale di inizio (0-23)
-  workEndHour: number; // ora locale di fine (0-23)
+  workingDays: number[]; // 1=Mon ... 7=Sun (luxon weekday)
+  workStartHour: number; // local start hour (0-23)
+  workEndHour: number; // local end hour (0-23)
 
-  // --- profilo account (influenza la fase di partenza) ---
+  // --- account profile (drives the starting phase) ---
   accountAgeDays: number | null;
   connectionCount: number | null;
 
-  // --- tetto "duro" lato LinkedIn ---
-  weeklyInviteCeiling: number; // il controller non lo supera MAI
+  // --- "hard" ceiling on LinkedIn's side ---
+  weeklyInviteCeiling: number; // the controller NEVER goes past it
 
-  // --- rampa di warm-up ---
-  warmupStartDate: string | null; // ISO date (YYYY-MM-DD) di inizio automazione
-  rampStartWeekOffset: number; // salta avanti se l'account è già maturo (0 = parti da week 1)
+  // --- warm-up ramp ---
+  warmupStartDate: string | null; // ISO date (YYYY-MM-DD) automation started
+  rampStartWeekOffset: number; // skip ahead if the account is already mature (0 = start at week 1)
   ramp: RampStep[];
 
-  // --- controller adattivo ---
-  minAcceptanceRate: number; // sotto questa soglia: frena inviti (es. 0.40)
-  backoffFactor: number; // riduci target a questa frazione su segnale (es. 0.7)
-  recoveryStepPct: number; // +X% per periodo quando i segnali sono puliti (es. 0.10)
-  backoffCooldownHours: number; // attesa dopo un segnale prima di riprovare
-  cleanDaysToRecover: number; // giorni "puliti" prima di rialzare i limiti
+  // --- adaptive controller ---
+  minAcceptanceRate: number; // below this threshold: throttle invites (e.g. 0.40)
+  backoffFactor: number; // cut the target to this fraction on a signal (e.g. 0.7)
+  recoveryStepPct: number; // +X% per period while the signals stay clean (e.g. 0.10)
+  backoffCooldownHours: number; // wait after a signal before trying again
+  cleanDaysToRecover: number; // "clean" days before raising the limits again
 
-  // --- cap giornalieri per tipo di azione (mix) ---
+  // --- daily caps per action type (mix) ---
   caps: {
-    invites: number; // tetto assoluto (oltre a rampa/controller)
+    invites: number; // absolute ceiling (on top of ramp/controller)
     messages: number;
     visits: number;
     follows: number;
@@ -92,36 +92,37 @@ export interface SafetyConfig {
     withdraws: number;
   };
 
-  // --- ritardi (ms) e micro-comportamenti umani ---
+  // --- delays (ms) and human micro-behaviours ---
   delays: {
     betweenActionsMin: number;
     betweenActionsMax: number;
-    longBreakEveryMin: number; // dopo N azioni fai una pausa lunga
+    longBreakEveryMin: number; // after N actions take a long break
     longBreakEveryMax: number;
     longBreakMin: number;
     longBreakMax: number;
   };
 
-  // --- comportamento invito ---
-  sendNoteOnConnect: boolean; // default FALSE per account free
+  // --- invite behaviour ---
+  sendNoteOnConnect: boolean; // FALSE by default for free accounts
 
-  // --- gestione backlog inviti pendenti ---
-  autoWithdrawAfterDays: number; // ritira inviti più vecchi di N giorni
-  maxPendingBacklog: number; // tieni il backlog sotto questa soglia (LinkedIn: ~500)
+  // --- pending invite backlog handling ---
+  autoWithdrawAfterDays: number; // withdraw invites older than N days
+  maxPendingBacklog: number; // keep the backlog under this threshold (LinkedIn: ~500)
 }
 
 // ============================================================
-//  Override per-campagna sulle impostazioni di sicurezza globali.
-//  Solo i campi non-null sovrascrivono la SafetyConfig globale
-//  quando l'engine processa quella campagna.
+//  Per-campaign overrides on the global safety settings.
+//  Only non-null fields override the global SafetyConfig
+//  when the engine processes that campaign.
 //
-//  Onorati dall'engine per-campagna:
-//   - caps, delays, sendNoteOnConnect (sostituiscono il valore globale)
-//   - workingDays, workStartHour, workEndHour, timezone (restrizione *aggiuntiva*
-//     sulla finestra oraria: la globale resta necessaria, la per-campagna restringe)
-//  Salvati ma non ancora onorati (l'engine usa il globale):
-//   - weeklyInviteCeiling, ramp, rampStartWeekOffset, controller adattivo,
-//     backlog/withdraw — stato globale del controller, richiede refactor profondo.
+//  Honoured per-campaign by the engine:
+//   - caps, delays, sendNoteOnConnect (they replace the global value)
+//   - workingDays, workStartHour, workEndHour, timezone (an *additional*
+//     restriction on the time window: the global one still applies, the
+//     per-campaign one narrows it)
+//  Stored but not honoured yet (the engine uses the global value):
+//   - weeklyInviteCeiling, ramp, rampStartWeekOffset, adaptive controller,
+//     backlog/withdraw — global controller state, needs a deep refactor.
 // ============================================================
 export interface CampaignOverrides {
   sendNoteOnConnect?: boolean;
@@ -131,7 +132,7 @@ export interface CampaignOverrides {
   workStartHour?: number;
   workEndHour?: number;
   timezone?: string;
-  // Snapshot informativi (salvati per visibilità, non ancora applicati per-campagna):
+  // Informational snapshots (stored for visibility, not applied per-campaign yet):
   weeklyInviteCeiling?: number;
   rampStartWeekOffset?: number;
   minAcceptanceRate?: number;
@@ -145,22 +146,22 @@ export interface CampaignOverrides {
 }
 
 // ============================================================
-//  Stato del controller adattivo (persistito, single-row)
+//  Adaptive controller state (persisted, single-row)
 // ============================================================
 
 export interface ControllerState {
-  currentDailyTarget: number; // target inviti effettivo per oggi
-  currentWeeklyCeiling: number; // tetto settimanale effettivo (<= config.weeklyInviteCeiling)
-  backoffUntil: number | null; // epoch ms: sospensione inviti fino a
+  currentDailyTarget: number; // effective invite target for today
+  currentWeeklyCeiling: number; // effective weekly ceiling (<= config.weeklyInviteCeiling)
+  backoffUntil: number | null; // epoch ms: invites suspended until
   lastSignalAt: number | null;
   consecutiveCleanDays: number;
-  lastAdjustedDate: string | null; // ISO date dell'ultimo aggiornamento
-  paused: boolean; // pausa manuale dell'intero worker
-  haltedReason: string | null; // se != null: stop di sicurezza (es. captcha)
+  lastAdjustedDate: string | null; // ISO date of the last adjustment
+  paused: boolean; // manual pause of the whole worker
+  haltedReason: string | null; // if != null: safety stop (e.g. captcha)
 }
 
 // ============================================================
-//  Righe del database
+//  Database rows
 // ============================================================
 
 export interface Contact {
@@ -184,7 +185,7 @@ export interface Campaign {
   name: string;
   status: CampaignStatus;
   steps: string; // JSON (Step[])
-  settings: string | null; // JSON (override per-campagna)
+  settings: string | null; // JSON (per-campaign overrides)
   created_at: number;
   updated_at: number;
 }
@@ -223,7 +224,7 @@ export interface SignalRow {
   created_at: number;
 }
 
-// ---- Risultato di un'azione browser ----
+// ---- Result of a browser action ----
 export interface ActionResult {
   status: ActionStatus;
   detail?: string;

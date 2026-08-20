@@ -1,5 +1,5 @@
 // ============================================================
-//  Tool di autenticazione LinkedIn.
+//  LinkedIn authentication tools.
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -18,9 +18,9 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
   server.tool(
     {
       name: 'linkedin_auth_status',
-      title: 'Stato connessione LinkedIn',
+      title: 'LinkedIn connection status',
       description:
-        'Dice se la sessione LinkedIn salvata è valida e con quale account. Chiamalo SEMPRE per primo: senza sessione nessuna altra azione può funzionare.',
+        'Tells you whether the saved LinkedIn session is still valid and which account it belongs to. ALWAYS call this first: without a session no other action can work.',
       inputSchema: z.object({}),
       outputSchema: authStatusOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -34,8 +34,8 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
         engine_busy: st.busy,
       };
       const text = data.logged_in
-        ? `Connesso a LinkedIn come ${data.account ?? '(nome non rilevato)'}.`
-        : 'Non connesso a LinkedIn. Usa linkedin_login per accedere una volta sola.';
+        ? `Connected to LinkedIn as ${data.account ?? '(name not detected)'}.`
+        : 'Not connected to LinkedIn. Use linkedin_login to sign in once.';
       return { content: [textBlock(text)], structuredContent: data };
     },
   );
@@ -43,9 +43,9 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
   server.tool(
     {
       name: 'linkedin_login',
-      title: 'Accedi a LinkedIn',
+      title: 'Sign in to LinkedIn',
       description:
-        "Apre una finestra di Chrome sulla pagina di login di LinkedIn e attende che l'utente acceda a mano (anche con Google e 2FA). Il tool non vede né salva la password: conserva solo la sessione del browser, in locale. Si fa una volta sola. Avvisa l'utente che deve guardare la finestra che si apre.",
+        "Opens a Chrome window on the LinkedIn login page and waits for the user to sign in by hand (Google sign-in and 2FA included). The tool never sees or stores the password: it only keeps the browser session, locally. You do this once. Warn the user that they need to watch the window that opens.",
       inputSchema: z.object({
         wait_seconds: z
           .number()
@@ -53,7 +53,7 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
           .min(10)
           .max(600)
           .optional()
-          .describe('Quanto attendere il completamento del login (default 180 secondi)'),
+          .describe('How long to wait for the login to complete (default 180 seconds)'),
       }),
       outputSchema: z.object({
         status: z.enum(['connected', 'pending', 'engine_running', 'cancelled']),
@@ -70,7 +70,7 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
           timeoutMs: (wait_seconds ?? 180) * 1000,
           signal: ctx.signal,
           onProgress: (elapsed, total) => {
-            void ctx.reportProgress(elapsed, total, 'in attesa del login nella finestra del browser…');
+            void ctx.reportProgress(elapsed, total, 'waiting for the login in the browser window…');
           },
         });
         return {
@@ -84,7 +84,7 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
           },
         };
       } catch (err) {
-        return fromException(err, 'Login non riuscito');
+        return fromException(err, 'Login failed');
       }
     },
   );
@@ -92,9 +92,9 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
   server.tool(
     {
       name: 'linkedin_logout',
-      title: 'Disconnetti LinkedIn',
+      title: 'Disconnect LinkedIn',
       description:
-        'Cancella i cookie di sessione LinkedIn dal profilo browser locale. Dopo servirà un nuovo linkedin_login. Richiede che l\'engine sia fermo.',
+        'Clears the LinkedIn session cookies from the local browser profile. A fresh linkedin_login will be needed afterwards. Requires the engine to be stopped.',
       inputSchema: z.object({}),
       outputSchema: authStatusOutput,
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -102,13 +102,13 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
     async () => {
       if (engine.isRunning()) {
         return errorResult(
-          'L\'engine sta lavorando. Fermalo con engine_control action="stop" prima di disconnetterti.',
+          'The engine is working. Stop it with engine_control action="stop" before disconnecting.',
         );
       }
       try {
         const st = await authService.logout(engine);
         return {
-          content: [textBlock('Sessione LinkedIn cancellata dal profilo browser locale.')],
+          content: [textBlock('LinkedIn session cleared from the local browser profile.')],
           structuredContent: {
             logged_in: st.loggedIn,
             account: st.account,
@@ -117,7 +117,7 @@ export function registerAuthTools(server: MCPServer, engine: Engine): void {
           },
         };
       } catch (err) {
-        return fromException(err, 'Logout non riuscito');
+        return fromException(err, 'Logout failed');
       }
     },
   );

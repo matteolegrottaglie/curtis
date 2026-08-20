@@ -1,10 +1,10 @@
 // ============================================================
-//  Contatti: import CSV, elenco, cancellazione.
+//  Contacts: CSV import, listing, deletion.
 //
-//  Gli ID dei contatti di un import restano in memoria sotto un
-//  `import_id` breve: così da chat si può dire "iscrivi i contatti
-//  che ho appena importato" senza che il tool debba restituire
-//  migliaia di UUID nel risultato.
+//  The contact IDs from an import stay in memory under a short
+//  `import_id`: that way from chat you can say "enroll the contacts
+//  I just imported" without the tool having to hand back thousands
+//  of UUIDs in the result.
 // ============================================================
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -36,7 +36,7 @@ export interface ImportOutcome {
   preview: ContactPreview[];
 }
 
-/** Ultimi import della sessione del daemon: import_id -> ID dei contatti. */
+/** Most recent imports of the daemon session: import_id -> contact IDs. */
 const recentImports = new Map<string, string[]>();
 const MAX_REMEMBERED_IMPORTS = 20;
 
@@ -65,9 +65,9 @@ function toPreview(c: Contact): ContactPreview {
 }
 
 /**
- * Importa contatti da un file CSV su disco oppure da CSV incollato in chat.
- * Deduplica per `profile_url`: i duplicati non vengono reinseriti ma i loro ID
- * fanno comunque parte dell'import (così si possono iscrivere a una campagna).
+ * Imports contacts from a CSV file on disk or from CSV pasted into chat.
+ * Deduplicates by `profile_url`: duplicates are not re-inserted, but their IDs
+ * are still part of the import (so they can be enrolled in a campaign).
  */
 export function importContacts(opts: {
   filePath?: string;
@@ -80,12 +80,12 @@ export function importContacts(opts: {
   let source: string;
   if (opts.csvContent && opts.csvContent.trim()) {
     content = opts.csvContent;
-    source = 'incollato-in-chat';
+    source = 'pasted-in-chat';
   } else if (opts.filePath) {
     content = readFileSync(opts.filePath, 'utf8');
     source = basename(opts.filePath);
   } else {
-    throw new Error('serve `file_path` oppure `csv_content`');
+    throw new Error('`file_path` or `csv_content` is required');
   }
 
   const parsed = parseCsvBuffer(content, source);
@@ -123,14 +123,14 @@ export function deleteContacts(ids: string[], onlyUnenrolled: boolean): number {
   return repo.deleteContactsByIds(ids, onlyUnenrolled);
 }
 
-/** Tutti gli ID contatto in DB (usato da `enroll_contacts` con `all: true`). */
+/** Every contact ID in the DB (used by `enroll_contacts` with `all: true`). */
 export function allContactIds(): string[] {
   return (getDb().prepare('SELECT id FROM contacts').all() as { id: string }[]).map((r) => r.id);
 }
 
 /**
- * Risolve la selezione di contatti usata dai tool: import recente, lista
- * esplicita di ID, oppure tutti i contatti in DB.
+ * Resolves the contact selection used by the tools: a recent import, an
+ * explicit list of IDs, or every contact in the DB.
  */
 export function resolveContactIds(sel: {
   import_id?: string;
@@ -141,12 +141,12 @@ export function resolveContactIds(sel: {
     const ids = contactIdsForImport(sel.import_id);
     if (!ids) {
       throw new Error(
-        `import_id "${sel.import_id}" non trovato (il daemon è stato riavviato?). Reimporta il file, oppure usa contact_ids/all.`,
+        `import_id "${sel.import_id}" not found (was the daemon restarted?). Re-import the file, or use contact_ids/all.`,
       );
     }
     return ids;
   }
   if (sel.contact_ids?.length) return sel.contact_ids;
   if (sel.all) return allContactIds();
-  throw new Error('serve `import_id`, `contact_ids` oppure `all: true`');
+  throw new Error('`import_id`, `contact_ids` or `all: true` is required');
 }

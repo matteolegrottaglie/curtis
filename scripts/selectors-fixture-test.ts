@@ -1,18 +1,18 @@
 // ============================================================
-//  Test dei selettori su DOM sintetico — nessuna rete, nessun
-//  account: riproduce i findings verificati sulla UI LinkedIn del
-//  2026-08-20 (probing dal vivo) e li blocca contro le regressioni.
+//  Selector tests on a synthetic DOM — no network, no account:
+//  reproduces the findings verified on the LinkedIn UI of
+//  2026-08-20 (live probing) and locks them against regressions.
 //
-//  Da rilanciare OGNI VOLTA che si tocca src/linkedin/selectors.ts:
+//  Re-run EVERY TIME src/linkedin/selectors.ts is touched:
 //      npx tsx scripts/selectors-fixture-test.ts
 //
-//  Se la cache dei browser Playwright non combacia con la versione
-//  del pacchetto, passare il binario a mano:
-//      PW_BIN=/percorso/chrome-headless-shell npx tsx scripts/...
+//  If the Playwright browser cache does not match the package
+//  version, pass the binary by hand:
+//      PW_BIN=/path/to/chrome-headless-shell npx tsx scripts/...
 //
-//  ATTENZIONE: un fixture che passa NON garantisce che la UI vera sia
-//  ancora così. Qui si verifica la LOGICA di ancoraggio al nome e di
-//  click; la UI vera va ri-sondata con scripts/connect-no-note.ts.
+//  WARNING: a passing fixture does NOT guarantee the real UI still
+//  looks like this. Here we verify the LOGIC of name anchoring and
+//  clicking; the real UI must be re-probed with scripts/connect-no-note.ts.
 // ============================================================
 import { chromium } from 'playwright';
 import * as S from '../src/linkedin/selectors.js';
@@ -77,69 +77,69 @@ const mk = (o: Partial<Contact>): Contact => ({
   email: null, custom: null, source: null, created_at: 0, ...o,
 });
 console.log('\n— tokensForContact —');
-check('nome pieno', JSON.stringify(S.tokensForContact(mk({ full_name: 'Giulia Ferrari' }))) === '["giulia","ferrari"]');
-check('accenti + titolo', JSON.stringify(S.tokensForContact(mk({ full_name: 'Dr. Chloé Marchesì' }))) === '["chloe","marchesi"]',
+check('full name', JSON.stringify(S.tokensForContact(mk({ full_name: 'Giulia Ferrari' }))) === '["giulia","ferrari"]');
+check('accents + title', JSON.stringify(S.tokensForContact(mk({ full_name: 'Dr. Chloé Marchesì' }))) === '["chloe","marchesi"]',
   S.tokensForContact(mk({ full_name: 'Dr. Chloé Marchesì' })));
 check('first+last', JSON.stringify(S.tokensForContact(mk({ first_name: 'Anna', last_name: 'Bianchi' }))) === '["anna","bianchi"]');
-check('fallback slug (scarta hash)',
+check('slug fallback (drops the hash)',
   JSON.stringify(S.tokensForContact(mk({ profile_url: 'https://www.linkedin.com/in/giulia-ferrari-1a2b3c4/' }))) === '["giulia","ferrari"]',
   S.tokensForContact(mk({ profile_url: 'https://www.linkedin.com/in/giulia-ferrari-1a2b3c4/' })));
-check('nessun ancoraggio → []', S.tokensForContact(mk({ profile_url: 'https://www.linkedin.com/in/ab/' })).length === 0);
+check('no anchor → []', S.tokensForContact(mk({ profile_url: 'https://www.linkedin.com/in/ab/' })).length === 0);
 
-// ---- il bug originale, riprodotto -------------------------------------
-console.log('\n— regressione: getByRole vs aria-label —');
+// ---- the original bug, reproduced -------------------------------------
+console.log('\n— regression: getByRole vs aria-label —');
 await page.setContent(TOPCARD('Giulia Ferrari'));
-check('getByRole(button,/^connect$/) → 0 (il bug)',
+check('getByRole(button,/^connect$/) → 0 (the bug)',
   (await page.getByRole('button', { name: /^\s*connect\s*$/i }).count()) === 0);
-check('[aria-label*="connect"] → trovato', (await page.locator('[aria-label*="connect" i]').count()) >= 2);
+check('[aria-label*="connect"] → found', (await page.locator('[aria-label*="connect" i]').count()) >= 2);
 
-// ---- probe ancorato al nome -------------------------------------------
+// ---- name-anchored probe ----------------------------------------------
 console.log('\n— probeTopCard —');
 const target = S.tokensForContact(mk({ full_name: 'Giulia Ferrari' }));
 const pr = await S.probeTopCard(page, target, 5000);
 check("kind = 'connect'", pr.kind === 'connect', pr.kind);
-check('label = quella della top-card, NON della sidebar', pr.label === 'Invite Giulia Ferrari to connect', pr.label);
-check('nessun falso match sul follow/message', !pr.labels.message && !pr.labels.follow, pr.labels);
+check('label = the top-card one, NOT the sidebar one', pr.label === 'Invite Giulia Ferrari to connect', pr.label);
+check('no false match on follow/message', !pr.labels.message && !pr.labels.follow, pr.labels);
 
 const other = await S.probeTopCard(page, ['mario', 'rossini'], 5000);
-check('token diversi → si aggancia alla persona giusta (sidebar)', other.label === 'Invite Mario Rossini to connect', other.label);
+check('different tokens → latches onto the right person (sidebar)', other.label === 'Invite Mario Rossini to connect', other.label);
 const nobody = await S.probeTopCard(page, ['zzzz', 'qqqq'], 3000);
-check("nessuna corrispondenza → kind 'none'", nobody.kind === 'none' && nobody.sample.length >= 2, nobody);
-check('tokens vuoti → probe rifiuta subito', (await S.probeTopCard(page, [], 3000)).kind === 'none');
+check("no match → kind 'none'", nobody.kind === 'none' && nobody.sample.length >= 2, nobody);
+check('empty tokens → probe bails out immediately', (await S.probeTopCard(page, [], 3000)).kind === 'none');
 
 await page.setContent(PENDING);
 const pend = await S.probeTopCard(page, target, 5000);
-check("pending riconosciuto (e NON come 'connect')", pend.kind === 'pending', pend.kind);
-check('label pending esatta', pend.labels.pending === 'Pending, click to withdraw invitation sent to Giulia Ferrari', pend.labels.pending);
+check("pending recognized (and NOT as 'connect')", pend.kind === 'pending', pend.kind);
+check('exact pending label', pend.labels.pending === 'Pending, click to withdraw invitation sent to Giulia Ferrari', pend.labels.pending);
 
 await page.setContent(CONNECTED);
 const conn = await S.probeTopCard(page, target, 5000);
-check("1° grado: kind 'none' + label message", conn.kind === 'none' && conn.labels.message === 'Message Giulia Ferrari', conn);
+check("1st degree: kind 'none' + message label", conn.kind === 'none' && conn.labels.message === 'Message Giulia Ferrari', conn);
 
-// ---- menu "Altro": <div aria-label> dentro <a role=menuitem> ----------
-console.log('\n— menu Altro —');
+// ---- "More" menu: <div aria-label> inside <a role=menuitem> -----------
+console.log('\n— More menu —');
 await page.setContent(MOREMENU);
 const menu = await S.probeTopCard(page, target, 5000);
-check('connect trovato dentro il menu', menu.kind === 'connect', menu.kind);
+check('connect found inside the menu', menu.kind === 'connect', menu.kind);
 await page.evaluate(() => ((window as any).__hit = null));
 await H.humanClick(S.byExactLabel(page, menu.label!));
-check("click risalito all'<a role=menuitem>", (await page.evaluate(() => (window as any).__hit)) === 'MENUITEM',
+check('click bubbled up to the <a role=menuitem>', (await page.evaluate(() => (window as any).__hit)) === 'MENUITEM',
   await page.evaluate(() => (window as any).__hit));
 
-// ---- click sotto la top-nav sticky ------------------------------------
-console.log('\n— click con top-nav sticky sovrapposta —');
+// ---- click underneath the sticky top-nav ------------------------------
+console.log('\n— click with the sticky top-nav overlapping —');
 await page.setContent(TOPCARD('Giulia Ferrari'));
 await page.evaluate(() => {
   (window as any).__hit = null;
-  // il Connect finisce esattamente sotto l'header fisso
+  // the Connect ends up exactly under the fixed header
   (document.querySelector('main') as HTMLElement).style.paddingTop = '40px';
 });
 await H.humanClick(S.byExactLabel(page, 'Invite Giulia Ferrari to connect'));
 const hit = await page.evaluate(() => (window as any).__hit);
-check('ha cliccato CONNECT, non il banner Premium', hit === 'CONNECT', hit);
+check('clicked CONNECT, not the Premium banner', hit === 'CONNECT', hit);
 
-// ---- controlli della modale invito: match sul VISIBILE ----------------
-console.log('\n— modale invito —');
+// ---- invite modal controls: match on what is VISIBLE ------------------
+console.log('\n— invite modal —');
 await page.setContent(`<style>${CSS}</style>
   <div class="msg-overlay" style="display:none"><button>Send</button></div>
   <div role="dialog">
@@ -147,9 +147,9 @@ await page.setContent(`<style>${CSS}</style>
     <button onclick="window.__hit='NONOTE'">Send without a note</button>
   </div>`);
 await page.evaluate(() => ((window as any).__hit = null));
-check('addNote trovato', await S.addNoteControl(page).isVisible());
+check('addNote found', await S.addNoteControl(page).isVisible());
 await H.humanClick(S.sendWithoutNoteControl(page));
-check('cliccato "Send without a note"', (await page.evaluate(() => (window as any).__hit)) === 'NONOTE',
+check('clicked "Send without a note"', (await page.evaluate(() => (window as any).__hit)) === 'NONOTE',
   await page.evaluate(() => (window as any).__hit));
 
 await page.setContent(`<style>${CSS}</style>
@@ -157,9 +157,9 @@ await page.setContent(`<style>${CSS}</style>
   <div role="dialog"><button onclick="window.__hit='SEND'">Send</button></div>`);
 await page.evaluate(() => ((window as any).__hit = null));
 await H.humanClick(S.sendInviteControl(page));
-check('la "Send" NASCOSTA più in alto nel DOM non ruba il match',
+check('the HIDDEN "Send" earlier in the DOM does not steal the match',
   (await page.evaluate(() => (window as any).__hit)) === 'SEND', await page.evaluate(() => (window as any).__hit));
 
 await browser.close();
-console.log(failures === 0 ? '\n✓ tutti i controlli passati\n' : `\n✖ ${failures} controlli falliti\n`);
+console.log(failures === 0 ? '\n✓ all checks passed\n' : `\n✖ ${failures} checks failed\n`);
 process.exit(failures === 0 ? 0 : 1);

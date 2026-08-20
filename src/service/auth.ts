@@ -1,11 +1,11 @@
 // ============================================================
-//  Autenticazione LinkedIn.
+//  LinkedIn authentication.
 //
-//  LinkedIn non ha API pubbliche per inviare inviti: l'"auth" è il
-//  login normale dentro una finestra di Chrome reale, controllata da
-//  Playwright. Il tool NON vede né salva la password: apre la pagina,
-//  l'utente accede a mano (anche con Google e 2FA), e la sessione
-//  resta nel profilo browser su disco.
+//  LinkedIn has no public API for sending invites: "auth" here is the
+//  ordinary login inside a real Chrome window driven by Playwright.
+//  The tool never sees nor stores the password: it opens the page, the
+//  user signs in by hand (Google and 2FA included), and the session
+//  lives on in the browser profile on disk.
 // ============================================================
 import type { Engine, AuthStatus } from '../sequencer/engine.js';
 import { sleep } from '../util/time.js';
@@ -21,10 +21,10 @@ export interface LoginOutcome {
 }
 
 /**
- * Riporta il browser in background dopo il login, così non resta una
- * finestra aperta sullo schermo. Se per qualunque motivo la sessione non
- * sopravvivesse al riavvio del contesto, si ripristina la finestra
- * visibile: meglio una finestra di troppo che un login perso.
+ * Sends the browser back to the background after login, so no window is
+ * left sitting on screen. If for any reason the session did not survive
+ * restarting the context, the visible window is restored: better one
+ * window too many than a login thrown away.
  */
 async function hideWindow(engine: Engine): Promise<boolean> {
   if (!engine.session.visible) return false;
@@ -43,11 +43,11 @@ export async function authStatus(engine: Engine): Promise<AuthStatus> {
 }
 
 /**
- * Apre la finestra di login e attende che l'utente completi l'accesso.
+ * Opens the login window and waits for the user to finish signing in.
  *
- * Il polling usa la verifica *passiva* (cookie `li_at`, nessuna navigazione):
- * navigare mentre l'utente sta digitando le credenziali lo butterebbe fuori
- * dal flusso.
+ * Polling uses the *passive* check (the `li_at` cookie, no navigation):
+ * navigating while the user is typing their credentials would knock them
+ * out of the flow.
  */
 export async function login(
   engine: Engine,
@@ -66,7 +66,7 @@ export async function login(
       account: null,
       logged_in: false,
       message:
-        "L'engine sta lavorando e possiede la finestra del browser. Fermalo (engine_control action=\"stop\") e riprova il login.",
+        'The engine is working and owns the browser window. Stop it (engine_control action="stop") and retry the login.',
       waited_seconds: 0,
     };
   }
@@ -77,7 +77,7 @@ export async function login(
       status: 'connected',
       account: opened.account,
       logged_in: true,
-      message: `Già connesso come ${opened.account ?? 'account LinkedIn'}.`,
+      message: `Already signed in as ${opened.account ?? 'LinkedIn account'}.`,
       waited_seconds: 0,
     };
   }
@@ -90,7 +90,7 @@ export async function login(
         status: 'cancelled',
         account: null,
         logged_in: false,
-        message: 'Attesa interrotta. Il browser resta aperto: completa il login e richiama linkedin_auth_status.',
+        message: 'Wait interrupted. The browser stays open: finish the login and call linkedin_auth_status again.',
         waited_seconds: Math.round((Date.now() - started) / 1000),
       };
     }
@@ -103,8 +103,8 @@ export async function login(
         account: st.account,
         logged_in: true,
         message:
-          `Login completato come ${st.account ?? 'account LinkedIn'}. La sessione resta salvata: non dovrai rifarlo.` +
-          (hidden ? ' La finestra del browser è stata chiusa: da qui in poi lavora in background.' : ''),
+          `Login completed as ${st.account ?? 'LinkedIn account'}. The session is saved: you won't have to do it again.` +
+          (hidden ? ' The browser window has been closed: from here on it works in the background.' : ''),
         waited_seconds: Math.round((Date.now() - started) / 1000),
       };
     }
@@ -116,7 +116,7 @@ export async function login(
     account: null,
     logged_in: false,
     message:
-      'Login non ancora rilevato entro il tempo di attesa. La finestra del browser resta aperta: completa l\'accesso e poi richiama linkedin_auth_status.',
+      'No login detected within the wait window. The browser window stays open: finish signing in, then call linkedin_auth_status again.',
     waited_seconds: totalSeconds,
   };
 }

@@ -1,6 +1,6 @@
-// Controller adattivo: rampa, tetti, backoff e halt.
-// Gira su un database temporaneo: LKSQ_DATA_DIR va impostata PRIMA di
-// importare config.ts, che la legge una volta sola all'import.
+// Adaptive controller: ramp-up, caps, backoff and halt.
+// Runs against a throwaway database: LKSQ_DATA_DIR must be set BEFORE
+// importing config.ts, which reads it exactly once at import time.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -19,7 +19,7 @@ const { DEFAULT_SAFETY_CONFIG, DEFAULT_CONTROLLER_STATE } = await import('../src
 
 before(() => initDb());
 
-/** Riporta DB e stato ai default fra un test e l'altro. */
+/** Brings DB and state back to defaults between one test and the next. */
 function reset(): void {
   const db = getDb();
   db.exec('DELETE FROM actions; DELETE FROM signals; DELETE FROM campaign_contacts;');
@@ -27,22 +27,22 @@ function reset(): void {
   repo.saveControllerState({ ...DEFAULT_CONTROLLER_STATE });
 }
 
-test('la rampa segue le settimane trascorse dall\'inizio del warm-up', () => {
+test('the ramp follows the weeks elapsed since the start of the warm-up', () => {
   reset();
   const cfg = repo.getSafetyConfig();
-  const now = Date.UTC(2026, 0, 29); // giovedì
+  const now = Date.UTC(2026, 0, 29); // Thursday
 
-  cfg.warmupStartDate = '2026-01-29'; // settimana 1
+  cfg.warmupStartDate = '2026-01-29'; // week 1
   assert.equal(controller.rampDailyTarget(cfg, now), 12);
 
-  cfg.warmupStartDate = '2026-01-15'; // due settimane fa -> settimana 3
+  cfg.warmupStartDate = '2026-01-15'; // two weeks ago -> week 3
   assert.equal(controller.rampDailyTarget(cfg, now), 18);
 
-  cfg.warmupStartDate = '2025-01-01'; // oltre la fine della rampa: resta all'ultimo gradino
+  cfg.warmupStartDate = '2025-01-01'; // past the end of the ramp: stays on the last step
   assert.equal(controller.rampDailyTarget(cfg, now), 25);
 });
 
-test('rampStartWeekOffset salta avanti per account già maturi', () => {
+test('rampStartWeekOffset skips ahead for already seasoned accounts', () => {
   reset();
   const cfg = repo.getSafetyConfig();
   cfg.warmupStartDate = '2026-01-29';
@@ -50,7 +50,7 @@ test('rampStartWeekOffset salta avanti per account già maturi', () => {
   assert.equal(controller.rampDailyTarget(cfg, Date.UTC(2026, 0, 29)), 20);
 });
 
-test('remainingToday tiene conto del target giornaliero, del cap e del tetto settimanale', () => {
+test('remainingToday accounts for the daily target, the cap and the weekly ceiling', () => {
   reset();
   const state = repo.getControllerState();
   state.currentDailyTarget = 10;
@@ -61,14 +61,14 @@ test('remainingToday tiene conto del target giornaliero, del cap e del tetto set
   for (let i = 0; i < 4; i++) repo.logAction({ type: 'connect', status: 'success' });
   assert.equal(controller.remainingToday('connect'), 6);
 
-  // Il cap assoluto sul tipo di azione vince sul target della rampa.
+  // The hard cap on the action type beats the ramp target.
   const cfg = repo.getSafetyConfig();
   cfg.caps.invites = 5;
   repo.saveSafetyConfig(cfg);
   assert.equal(controller.remainingToday('connect'), 1);
 });
 
-test('le azioni fallite non consumano il budget giornaliero', () => {
+test('failed actions do not eat into the daily budget', () => {
   reset();
   const state = repo.getControllerState();
   state.currentDailyTarget = 3;
@@ -78,22 +78,22 @@ test('le azioni fallite non consumano il budget giornaliero', () => {
   assert.equal(controller.remainingToday('connect'), 3);
 });
 
-test('un segnale di limite settimanale abbassa il tetto e mette in backoff', () => {
+test('a weekly-limit signal lowers the ceiling and triggers a backoff', () => {
   reset();
   const before = repo.getControllerState().currentWeeklyCeiling;
   const now = Date.now();
-  controller.onSignal('weekly_limit', 2, 'modale limite', now);
+  controller.onSignal('weekly_limit', 2, 'limit modal', now);
 
   const after = repo.getControllerState();
-  assert.ok(after.currentWeeklyCeiling < before, 'il tetto settimanale deve scendere');
-  assert.ok(after.backoffUntil !== null && after.backoffUntil > now, 'deve esserci un backoff attivo');
+  assert.ok(after.currentWeeklyCeiling < before, 'the weekly ceiling must come down');
+  assert.ok(after.backoffUntil !== null && after.backoffUntil > now, 'a backoff must be active');
   assert.equal(controller.actionAllowedNow('connect', now).ok, false);
 
-  // Il backoff riguarda gli inviti, non le azioni soft come le visite.
+  // The backoff covers invites, not soft actions such as visits.
   assert.equal(controller.actionAllowedNow('visit', now).ok, true);
 });
 
-test('captcha e restrizione fermano tutto finché non si azzera l\'halt a mano', () => {
+test('captcha and restriction stop everything until the halt is cleared by hand', () => {
   reset();
   controller.onSignal('captcha', 3, 'checkpoint');
   const state = repo.getControllerState();
@@ -106,10 +106,10 @@ test('captcha e restrizione fermano tutto finché non si azzera l\'halt a mano',
   assert.equal(controller.actionAllowedNow('visit').ok, true);
 });
 
-test('il tetto adattivo non supera mai quello configurato', () => {
+test('the adaptive ceiling never goes above the configured one', () => {
   reset();
   const state = repo.getControllerState();
-  state.currentWeeklyCeiling = 500; // valore incoerente, es. dopo un abbassamento della config
+  state.currentWeeklyCeiling = 500; // inconsistent value, e.g. after the config was lowered
   repo.saveControllerState(state);
 
   const cfg = repo.getSafetyConfig();
@@ -120,17 +120,17 @@ test('il tetto adattivo non supera mai quello configurato', () => {
   assert.equal(out.currentWeeklyCeiling, 60);
 });
 
-test('un acceptance rate sotto soglia riduce il target giornaliero', () => {
+test('an acceptance rate below threshold cuts the daily target', () => {
   reset();
   const cfg = repo.getSafetyConfig();
-  cfg.warmupStartDate = '2020-01-01'; // fine rampa: 25/giorno
+  cfg.warmupStartDate = '2020-01-01'; // end of the ramp: 25/day
   cfg.caps.invites = 30;
   repo.saveSafetyConfig(cfg);
 
-  const pieno = controller.recomputeDaily().currentDailyTarget;
-  assert.equal(pieno, 25);
+  const full = controller.recomputeDaily().currentDailyTarget;
+  assert.equal(full, 25);
 
-  // 10 inviti inviati, nessuno accettato -> acceptance 0%, sotto la soglia del 40%.
+  // 10 invites sent, none accepted -> acceptance 0%, below the 40% threshold.
   const db = getDb();
   const now = Date.now();
   db.exec("INSERT INTO campaigns (id,name,status,steps,created_at,updated_at) VALUES ('camp','c','draft','[]',0,0)");
@@ -141,10 +141,10 @@ test('un acceptance rate sotto soglia riduce il target giornaliero', () => {
     ).run(`e${i}`, 'camp', `ct${i}`, 'connect_sent', now, now);
   }
   assert.equal(repo.acceptanceRate(30), 0);
-  assert.ok(controller.recomputeDaily().currentDailyTarget < pieno, 'il target deve scendere');
+  assert.ok(controller.recomputeDaily().currentDailyTarget < full, 'the target must come down');
 });
 
-test('il backlog di inviti pendenti pieno blocca nuovi inviti', () => {
+test('a full backlog of pending invites blocks new invites', () => {
   reset();
   const cfg = repo.getSafetyConfig();
   cfg.maxPendingBacklog = 50;

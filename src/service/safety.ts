@@ -1,9 +1,9 @@
 // ============================================================
-//  Impostazioni di sicurezza: lettura e aggiornamento parziale.
+//  Safety settings: read and partial update.
 //
-//  L'aggiornamento accetta una patch parziale (molto più usabile da
-//  chat: "abbassa gli inviti a 10/giorno" tocca un solo campo) e la
-//  valida come config completa prima di salvarla.
+//  The update accepts a partial patch (far more usable from chat:
+//  "drop invites to 10/day" touches a single field) and validates it
+//  as a complete config before saving it.
 // ============================================================
 import * as repo from '../db/repo.js';
 import * as controller from '../safety/controller.js';
@@ -14,7 +14,7 @@ export function getSafetySettings(): SafetyConfig {
   return repo.getSafetyConfig();
 }
 
-/** Fonde la patch sopra la config corrente, valida il risultato, salva. */
+/** Merges the patch over the current config, validates the result, saves. */
 export function updateSafetySettings(patch: SafetyConfigPatch): SafetyConfig {
   const current = repo.getSafetyConfig();
   const merged: SafetyConfig = {
@@ -28,11 +28,11 @@ export function updateSafetySettings(patch: SafetyConfigPatch): SafetyConfig {
   const parsed = safetyConfigSchema.safeParse(merged);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ');
-    throw new Error(`impostazioni non valide — ${issues}`);
+    throw new Error(`invalid settings — ${issues}`);
   }
 
   repo.saveSafetyConfig(parsed.data);
-  // Il tetto adattivo non deve restare sopra quello appena configurato.
+  // The adaptive cap must not stay above the one just configured.
   controller.recomputeDaily();
   return repo.getSafetyConfig();
 }

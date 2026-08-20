@@ -1,41 +1,41 @@
 // ============================================================
-//  Comportamento umano: ritardi, digitazione, scroll, click.
-//  Niente intervalli fissi, niente raffiche.
+//  Human behaviour: delays, typing, scrolling, clicking.
+//  No fixed intervals, no bursts.
 // ============================================================
 import type { Page, Locator } from 'playwright';
 import { gaussianClamped, randInt, chance } from '../util/rand.js';
 import { sleep } from '../util/time.js';
 import type { SafetyConfig } from '../types.js';
 
-/** Pausa principale tra due azioni "pesanti" (distribuzione ~gaussiana). */
+/** Main pause between two "heavy" actions (roughly gaussian distribution). */
 export async function humanPause(cfg: SafetyConfig, multiplier = 1): Promise<void> {
   const ms = gaussianClamped(cfg.delays.betweenActionsMin, cfg.delays.betweenActionsMax) * multiplier;
   await sleep(Math.round(ms));
 }
 
-/** Micro-pausa (UI: tra un click e l'altro, attese di reazione). */
+/** Micro-pause (UI: between one click and the next, reaction time). */
 export async function shortPause(min = 400, max = 1800): Promise<void> {
   await sleep(randInt(min, max));
 }
 
-/** Pausa "di lettura" di una pagina/profilo. */
+/** "Reading" pause on a page/profile. */
 export async function readingPause(): Promise<void> {
   await sleep(randInt(1800, 6000));
 }
 
-/** Pausa lunga "caffè" — ogni tanto, per spezzare il ritmo. */
+/** Long "coffee" break — every so often, to break up the rhythm. */
 export async function longBreak(cfg: SafetyConfig): Promise<number> {
   const ms = Math.round(gaussianClamped(cfg.delays.longBreakMin, cfg.delays.longBreakMax));
   await sleep(ms);
   return ms;
 }
 
-/** Soglia casuale di azioni dopo cui prendere una pausa lunga. */
+/** Random number of actions after which to take a long break. */
 export function nextBreakThreshold(cfg: SafetyConfig): number {
   return randInt(cfg.delays.longBreakEveryMin, cfg.delays.longBreakEveryMax);
 }
 
-/** Digitazione carattere per carattere con ritmo variabile e pause di pensiero. */
+/** Character-by-character typing with variable rhythm and thinking pauses. */
 export async function humanType(page: Page, locator: Locator, text: string): Promise<void> {
   await locator.click();
   await shortPause(250, 900);
@@ -46,7 +46,7 @@ export async function humanType(page: Page, locator: Locator, text: string): Pro
   await shortPause(300, 900);
 }
 
-/** Scroll naturale verso il basso (con micro-risalite occasionali). */
+/** Natural downward scrolling (with the occasional small scroll back up). */
 export async function humanScroll(page: Page, steps = randInt(2, 5)): Promise<void> {
   for (let i = 0; i < steps; i++) {
     await page.mouse.wheel(0, randInt(250, 650));
@@ -59,22 +59,22 @@ export async function humanScroll(page: Page, steps = randInt(2, 5)): Promise<vo
 }
 
 /**
- * Hover + micro-pausa + click (più umano del click secco), con
- * fallback che dispatcha il click sull'ELEMENTO invece che sulle
- * coordinate.
+ * Hover + micro-pause + click (more human than a bare click), with a
+ * fallback that dispatches the click on the ELEMENT instead of on
+ * coordinates.
  *
- * Perché: la top-nav sticky di LinkedIn (es. il banner "Claim Premium
- * Page for €0") intercetta i pointer event quando il bersaglio resta
- * sotto l'header. Per questo si centra prima l'elemento nel viewport
- * con scrollIntoView({ block: 'center' }) — scrollIntoViewIfNeeded()
- * non basta, lascia il bersaglio proprio sotto la barra.
+ * Why: LinkedIn's sticky top-nav (e.g. the "Claim Premium Page for €0"
+ * banner) intercepts pointer events whenever the target sits under the
+ * header. That is why the element is first centred in the viewport with
+ * scrollIntoView({ block: 'center' }) — scrollIntoViewIfNeeded() is not
+ * enough, it leaves the target right under the bar.
  *
- * MAI click({ force: true }): force clicca alle COORDINATE, quindi con
- * la top-nav sovrapposta colpisce il banner e porta alla pagina di
- * checkout Premium (successo davvero in test, 2026-08-20). Il fallback
- * qui usa el.click(): niente coordinate, niente elemento sbagliato.
- * Il bersaglio può essere un <div aria-label> dentro un
- * <a role="menuitem">, quindi si clicca l'antenato interattivo.
+ * NEVER click({ force: true }): force clicks at the COORDINATES, so with
+ * the top-nav overlapping it hits the banner and lands on the Premium
+ * checkout page (it actually succeeded in testing, 2026-08-20). The
+ * fallback here uses el.click(): no coordinates, no wrong element.
+ * The target may be a <div aria-label> inside an <a role="menuitem">,
+ * so we click the interactive ancestor.
  */
 export async function humanClick(locator: Locator): Promise<void> {
   await locator

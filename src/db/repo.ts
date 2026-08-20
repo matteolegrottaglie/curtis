@@ -1,5 +1,5 @@
 // ============================================================
-//  Data-access layer: tutte le query tipizzate.
+//  Data-access layer: every query, typed.
 // ============================================================
 import { randomUUID } from 'node:crypto';
 import { getDb } from './index.js';
@@ -25,7 +25,7 @@ export function getSafetyConfig(): SafetyConfig {
   const row = getDb().prepare('SELECT json FROM settings WHERE id = 1').get() as
     | { json: string }
     | undefined;
-  if (!row) throw new Error('settings non inizializzate');
+  if (!row) throw new Error('settings not initialized');
   return JSON.parse(row.json) as SafetyConfig;
 }
 
@@ -38,7 +38,7 @@ export function getControllerState(): ControllerState {
   const row = getDb().prepare('SELECT json FROM controller_state WHERE id = 1').get() as
     | { json: string }
     | undefined;
-  if (!row) throw new Error('controller_state non inizializzato');
+  if (!row) throw new Error('controller_state not initialized');
   return JSON.parse(row.json) as ControllerState;
 }
 
@@ -62,10 +62,10 @@ export interface ContactInput {
 }
 
 /**
- * Inserisce contatti deduplicando per profile_url.
- * Ritorna {inserted, skipped, ids} dove `ids` sono gli ID di TUTTI i contatti referenziati
- * dal file (sia quelli appena inseriti sia i duplicati già esistenti). Serve a "annulla import":
- * permette di rimuovere esattamente i contatti del file, duplicati inclusi.
+ * Inserts contacts, deduplicating on profile_url.
+ * Returns {inserted, skipped, ids} where `ids` are the IDs of EVERY contact referenced by the
+ * file (both the freshly inserted ones and the duplicates that already existed). This is what
+ * "undo import" needs: it can remove exactly the file's contacts, duplicates included.
  */
 export function upsertContacts(
   list: ContactInput[],
@@ -111,7 +111,7 @@ export function getContact(id: string): Contact | undefined {
   return getDb().prepare('SELECT * FROM contacts WHERE id = ?').get(id) as Contact | undefined;
 }
 
-/** Ritorna i contatti per lista di ID (chunked). Usato per la preview "contatti del file importato". */
+/** Returns contacts by list of IDs (chunked). Used by the "contacts in the imported file" preview. */
 export function getContactsByIds(ids: string[]): Contact[] {
   if (!ids.length) return [];
   const db = getDb();
@@ -149,10 +149,10 @@ export function countContacts(): number {
 }
 
 /**
- * Cancella i contatti per ID (chunked per restare sotto il limite parametri di SQLite).
- * Con `onlyUnenrolled=true` salta i contatti già iscritti a una campagna, così "annulla import"
- * non rompe campagne esistenti. Le iscrizioni dei contatti rimossi vanno via in cascata.
- * Restituisce il numero di righe effettivamente rimosse.
+ * Deletes contacts by ID (chunked to stay under SQLite's parameter limit).
+ * With `onlyUnenrolled=true` it skips contacts already enrolled in a campaign, so "undo import"
+ * cannot break existing campaigns. Enrollments of removed contacts go away by cascade.
+ * Returns the number of rows actually removed.
  */
 export function deleteContactsByIds(ids: string[], onlyUnenrolled = false): number {
   if (!ids.length) return 0;
@@ -199,7 +199,7 @@ export function updateCampaign(
   patch: { name?: string; steps?: Step[]; settings?: object | null },
 ): void {
   const c = getCampaign(id);
-  if (!c) throw new Error('campagna non trovata');
+  if (!c) throw new Error('campaign not found');
   getDb()
     .prepare('UPDATE campaigns SET name = ?, steps = ?, settings = ?, updated_at = ? WHERE id = ?')
     .run(
@@ -254,7 +254,7 @@ export interface DueEnrollment {
   campaign: Campaign;
 }
 
-/** Iscrizioni pronte per la prossima azione (solo campagne running). */
+/** Enrollments due for their next action (running campaigns only). */
 export function getDueEnrollments(limit = 50, at: number = now()): DueEnrollment[] {
   const rows = getDb()
     .prepare(
@@ -297,7 +297,7 @@ export function enrollmentStatusCounts(campaignId: string): Record<string, numbe
   return out;
 }
 
-/** Iscrizioni in 'connect_sent' da più di N giorni (per check accettazione / withdraw). */
+/** Enrollments stuck in 'connect_sent' for more than N days (for acceptance check / withdraw). */
 export function staleConnectSent(olderThanDays: number, at: number = now()): DueEnrollment[] {
   const cutoff = daysAgoMs(olderThanDays, at);
   const rows = getDb()
@@ -341,7 +341,7 @@ export function logAction(a: {
     );
 }
 
-/** Timestamps di tutte le azioni con un certo tipo+stato a partire da `since`. */
+/** Timestamps of every action with a given type+status starting from `since`. */
 export function actionTimestamps(type: ActionKind, status: ActionStatus, since: number): number[] {
   return (
     getDb()
@@ -425,7 +425,7 @@ export function recentSignals(sinceMs: number): SignalLite[] {
     .all(sinceMs) as SignalLite[];
 }
 
-// ---------------- Stats per controller / dashboard ----------------
+// ---------------- Stats for the controller / dashboard ----------------
 export function invitesInWindow(days: number, at: number = now()): number {
   return countActions({ type: 'connect', status: 'success', since: daysAgoMs(days, at) });
 }
@@ -438,7 +438,7 @@ export function pendingInvitesCount(): number {
   ).n;
 }
 
-/** Acceptance rate sugli inviti inviati negli ultimi `days` giorni (null se 0 inviti). */
+/** Acceptance rate on invites sent in the last `days` days (null when no invites were sent). */
 export function acceptanceRate(days = 30, at: number = now()): number | null {
   const since = daysAgoMs(days, at);
   const sent = (

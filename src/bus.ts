@@ -1,6 +1,6 @@
 // ============================================================
-//  Event bus interno: l'engine emette eventi, la dashboard (SSE)
-//  li ascolta per gli aggiornamenti live.
+//  Internal event bus: the engine emits events, the dashboard (SSE)
+//  listens to them for live updates.
 // ============================================================
 import { EventEmitter } from 'node:events';
 

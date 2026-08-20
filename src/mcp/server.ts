@@ -1,10 +1,10 @@
 // ============================================================
-//  Costruzione del server MCP (mcp-use v2).
+//  Building the MCP server (mcp-use v2).
 //
-//  Trasporto: HTTP su loopback. mcp-use v2 non offre stdio, ma sia
-//  Claude Code (`--transport http`) sia Codex (`url = ...`) parlano
-//  Streamable HTTP, e un daemon HTTP è comunque necessario: le
-//  campagne durano giorni e devono sopravvivere alla chiusura del client.
+//  Transport: HTTP on loopback. mcp-use v2 offers no stdio, but both
+//  Claude Code (`--transport http`) and Codex (`url = ...`) speak
+//  Streamable HTTP, and an HTTP daemon is needed anyway: campaigns
+//  run for days and must outlive the client being closed.
 // ============================================================
 import { timingSafeEqual } from 'node:crypto';
 import { MCPServer } from 'mcp-use';
@@ -20,7 +20,7 @@ import { registerSafetyTools } from './tools/safety.js';
 import { registerInsightTools } from './tools/insights.js';
 import { registerQuickstartTools } from './tools/quickstart.js';
 
-/** Confronto a tempo costante fra stringhe di lunghezza qualsiasi. */
+/** Constant-time comparison between strings of any length. */
 function tokenMatches(given: string, expected: string): boolean {
   const a = Buffer.from(given);
   const b = Buffer.from(expected);
@@ -28,11 +28,11 @@ function tokenMatches(given: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-/** Rotte pubbliche: non espongono nulla dell'account. */
+/** Public routes: they expose nothing about the account. */
 const PUBLIC_PATHS = new Set(['/', '/healthz', '/favicon.ico']);
 
 const LANDING_PAGE = `<!doctype html>
-<html lang="it"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LinkedIn Sequencer MCP</title>
 <style>
@@ -43,9 +43,9 @@ const LANDING_PAGE = `<!doctype html>
 </style></head>
 <body>
 <h1><span class="dot"></span>LinkedIn Sequencer MCP</h1>
-<p>Il daemon è attivo. L'endpoint MCP è <code>/mcp</code> e richiede un token bearer.</p>
-<p>Non c'è un'interfaccia web: si comanda tutto da chat, in Claude Code o Codex.
-Per la riga di configurazione esegui <code>lksq mcp-config</code>.</p>
+<p>The daemon is running. The MCP endpoint is <code>/mcp</code> and requires a bearer token.</p>
+<p>There is no web interface: everything is driven from chat, in Claude Code or Codex.
+For the configuration line run <code>lksq mcp-config</code>.</p>
 </body></html>`;
 
 export function buildMcpServer(engine: Engine): MCPServer {
@@ -56,21 +56,21 @@ export function buildMcpServer(engine: Engine): MCPServer {
     title: 'LinkedIn Sequencer',
     version: VERSION,
     description:
-      'Automazione LinkedIn locale: login, import di liste di contatti e invio graduale di richieste di collegamento e messaggi, con limiti anti-ban.',
+      'Local LinkedIn automation: login, importing contact lists and gradually sending connection requests and messages, under conservative rate limits.',
     instructions: INSTRUCTIONS,
     host: appConfig.host,
     port: appConfig.port,
     legacy: 'stateless',
-    // La discovery automatica di `skills/` è relativa alla working directory,
-    // che per un binario globale è arbitraria: il manuale operativo viaggia
-    // nelle `instructions`, che arrivano sempre.
+    // Auto-discovery of `skills/` is relative to the working directory,
+    // which for a global binary is arbitrary: the operating manual travels
+    // in the `instructions`, which always arrive.
     skills: false,
   });
 
-  // --- autenticazione dell'endpoint locale ---
-  // Un server in loopback è raggiungibile da qualunque processo sulla macchina,
-  // e qui "raggiungerlo" significa poter mandare inviti e messaggi a nome
-  // dell'utente. Il token vive in <dataDir>/token con permessi 0600.
+  // --- authentication of the local endpoint ---
+  // A loopback server is reachable by any process on the machine, and here
+  // "reaching it" means being able to send invitations and messages in the
+  // user's name. The token lives in <dataDir>/token with 0600 permissions.
   server.use(async (c, next) => {
     if (token === null) return next();
     const path = new URL(c.req.url).pathname;
@@ -81,7 +81,7 @@ export function buildMcpServer(engine: Engine): MCPServer {
       ? header.slice(7).trim()
       : (c.req.header('x-lksq-token') ?? '');
     if (!given || !tokenMatches(given, token)) {
-      return c.json({ error: 'unauthorized', hint: 'esegui `lksq mcp-config` per il token' }, 401);
+      return c.json({ error: 'unauthorized', hint: 'run `lksq mcp-config` to get the token' }, 401);
     }
     return next();
   });

@@ -1,9 +1,9 @@
 // ============================================================
-//  Percorso rapido: dalla lista di contatti agli inviti in partenza
-//  con una sola chiamata.
+//  Fast path: from a contact list to invitations going out
+//  in a single call.
 //
-//  È il caso d'uso principale del prodotto: "ecco il mio CSV,
-//  comincia a mandare le richieste di collegamento".
+//  This is the product's main use case: "here is my CSV,
+//  start sending the connection requests".
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -18,19 +18,19 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
   server.tool(
     {
       name: 'start_connection_campaign',
-      title: 'Avvia una campagna di collegamenti da una lista',
+      title: 'Start a connection campaign from a list',
       description:
-        "Il percorso completo in un colpo solo: importa la lista di contatti, crea una campagna con la sequenza sicura consigliata (visita → attesa 1 giorno → collegamento senza nota → attesa accettazione → primo messaggio opzionale), iscrive tutti i contatti importati, mette la campagna in esecuzione e avvia il motore. Richiede una sessione LinkedIn già attiva. Il motore lavora lentamente e solo dentro la finestra oraria configurata: è voluto, la lentezza è la protezione.",
+        "The whole path in one shot: imports the contact list, creates a campaign with the recommended safe sequence (visit → wait 1 day → connection request without a note → wait for acceptance → optional first message), enrolls every imported contact, sets the campaign running and starts the engine. Requires an active LinkedIn session. The engine works slowly and only inside the configured working window: that is deliberate, the slowness is the protection.",
       inputSchema: z.object({
-        file_path: z.string().optional().describe('Percorso del CSV con i contatti'),
-        csv_content: z.string().optional().describe('Contenuto CSV incollato (alternativa a file_path)'),
-        campaign_name: z.string().min(1).max(120).optional().describe('Default: nome del file + data'),
+        file_path: z.string().optional().describe('Path to the CSV with the contacts'),
+        csv_content: z.string().optional().describe('Pasted CSV content (alternative to file_path)'),
+        campaign_name: z.string().min(1).max(120).optional().describe('Default: file name + date'),
         first_message: z
           .string()
           .max(1900)
           .optional()
           .describe(
-            'Messaggio inviato dopo che l\'invito è stato accettato. È qui che va la personalizzazione. Placeholder: {firstName}, {company}, … Spintax: {Ciao|Salve}.',
+            'Message sent once the invitation has been accepted. This is where the personalisation belongs. Placeholders: {firstName}, {company}, … Spintax: {Hi|Hello}.',
           ),
         wait_accept_days: z.number().int().min(1).max(60).optional().describe('Default 14'),
         daily_invite_cap: z
@@ -39,11 +39,11 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
           .min(1)
           .max(100)
           .optional()
-          .describe('Tetto di inviti al giorno per questa campagna. Se omesso vale la rampa globale.'),
+          .describe('Cap on invitations per day for this campaign. If omitted the global ramp applies.'),
         start_engine: z
           .boolean()
           .optional()
-          .describe('Default true. Con false prepara tutto ma non fa partire il motore.'),
+          .describe('Default true. With false it sets everything up but does not start the engine.'),
       }),
       outputSchema: z.object({
         campaign_id: z.string(),
@@ -59,8 +59,8 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
         working_window: z.string(),
         next_steps: z.string(),
       }),
-      // Manda inviti veri, e chiamarlo due volte crea due campagne sugli
-      // stessi contatti: entrambe le cose vanno segnalate al client.
+      // It sends real invitations, and calling it twice creates two campaigns on
+      // the same contacts: the client has to be told about both.
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -73,11 +73,11 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
         const auth = await engine.authStatus();
         if (!auth.loggedIn) {
           return errorResult(
-            'Nessuna sessione LinkedIn attiva. Esegui prima linkedin_login: si aprirà una finestra del browser in cui accedere a mano.',
+            'No active LinkedIn session. Run linkedin_login first: a browser window will open for you to sign in by hand.',
           );
         }
         if (!input.file_path && !input.csv_content) {
-          return errorResult('Serve `file_path` (percorso del CSV) oppure `csv_content` (CSV incollato).');
+          return errorResult('Needs either `file_path` (path to the CSV) or `csv_content` (pasted CSV).');
         }
 
         const imported = contacts.importContacts({
@@ -87,7 +87,7 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
         });
         if (imported.contact_count === 0) {
           return errorResult(
-            `Nessun contatto utilizzabile nel file: ${imported.rows_invalid} righe scartate su ${imported.rows_total}. Serve una colonna con l'URL del profilo LinkedIn.`,
+            `No usable contact in the file: ${imported.rows_invalid} rows discarded out of ${imported.rows_total}. A column with the LinkedIn profile URL is required.`,
           );
         }
 
@@ -126,22 +126,22 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
           engine_running: st.running,
           daily_invite_target: st.dailyTarget,
           weekly_ceiling: st.weeklyCeiling,
-          working_window: `giorni ${cfg.workingDays.join(',')} · ${cfg.workStartHour}:00–${cfg.workEndHour}:00 (${cfg.timezone})`,
+          working_window: `days ${cfg.workingDays.join(',')} · ${cfg.workStartHour}:00–${cfg.workEndHour}:00 (${cfg.timezone})`,
           next_steps:
-            'Controlla l\'avanzamento con engine_status e get_recent_actions. Se compare uno stop di sicurezza, risolvilo su LinkedIn prima di riprendere.',
+            'Track progress with engine_status and get_recent_actions. If a safety stop shows up, clear it on LinkedIn before resuming.',
         };
 
         const text = [
-          `Campagna "${data.campaign_name}" creata e avviata.`,
-          `${data.contacts_enrolled} contatti iscritti (${imported.inserted} nuovi, ${imported.duplicates} già presenti${data.rows_invalid ? `, ${data.rows_invalid} righe scartate` : ''}).`,
+          `Campaign "${data.campaign_name}" created and started.`,
+          `${data.contacts_enrolled} contacts enrolled (${imported.inserted} new, ${imported.duplicates} already present${data.rows_invalid ? `, ${data.rows_invalid} rows discarded` : ''}).`,
           data.engine_running
-            ? `Motore attivo: fino a ${data.daily_invite_target} inviti oggi, tetto settimanale ${data.weekly_ceiling}, solo ${data.working_window}.`
-            : 'Motore NON avviato (start_engine=false): avvialo con engine_control action="start" quando vuoi.',
+            ? `Engine active: up to ${data.daily_invite_target} invitations today, weekly ceiling ${data.weekly_ceiling}, only ${data.working_window}.`
+            : 'Engine NOT started (start_engine=false): start it with engine_control action="start" whenever you like.',
           input.first_message
-            ? 'Il messaggio personalizzato parte solo dopo che l\'invito è stato accettato.'
-            : 'Nessun messaggio post-accettazione impostato: la sequenza si ferma all\'accettazione.',
+            ? 'The personalised message only goes out after the invitation has been accepted.'
+            : 'No post-acceptance message set: the sequence stops at acceptance.',
           imported.rows_url_inferred > 0
-            ? `⚠ ${imported.rows_url_inferred} righe avevano solo uno slug invece di un URL completo: l'URL è stato ricostruito, controlla che siano profili reali.`
+            ? `⚠ ${imported.rows_url_inferred} rows had only a slug instead of a full URL: the URL was reconstructed, check that these are real profiles.`
             : '',
         ]
           .filter(Boolean)
@@ -149,7 +149,7 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
 
         return { content: [textBlock(text)], structuredContent: data };
       } catch (err) {
-        return fromException(err, 'Avvio campagna non riuscito');
+        return fromException(err, 'Campaign start failed');
       }
     },
   );

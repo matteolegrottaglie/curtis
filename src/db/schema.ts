@@ -1,6 +1,6 @@
 // ============================================================
-//  Schema SQLite (embedded come stringa per evitare path-issue ESM).
-//  Tutti i timestamp sono epoch ms (INTEGER).
+//  SQLite schema (embedded as a string to dodge ESM path issues).
+//  Every timestamp is epoch ms (INTEGER).
 // ============================================================
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (

@@ -1,14 +1,14 @@
 // ============================================================
-//  Import CSV -> contatti.
-//  - rileva automaticamente le colonne comuni (IT/EN)
-//  - normalizza gli URL profilo LinkedIn
-//  - le colonne extra finiscono in `custom` (usabili nei template)
+//  CSV import -> contacts.
+//  - auto-detects the common columns (IT/EN)
+//  - normalizes LinkedIn profile URLs
+//  - extra columns end up in `custom` (usable in templates)
 // ============================================================
 import { readFileSync } from 'node:fs';
 import { parse } from 'csv-parse/sync';
 import type { ContactInput } from '../db/repo.js';
 
-// Alias header -> campo canonico
+// Header alias -> canonical field
 const FIELD_ALIASES: Record<string, string[]> = {
   profile_url: ['profile_url', 'profileurl', 'url', 'linkedin', 'linkedin url', 'linkedinurl', 'profilo', 'profile', 'link'],
   first_name: ['first_name', 'firstname', 'first name', 'nome'],
@@ -25,7 +25,7 @@ function normKey(s: string): string {
 }
 
 function buildHeaderMap(headers: string[]): Record<string, string> {
-  // header originale -> campo canonico (o '' se extra)
+  // original header -> canonical field (or '' if extra)
   const map: Record<string, string> = {};
   for (const h of headers) {
     const nk = normKey(h);
@@ -42,12 +42,12 @@ function buildHeaderMap(headers: string[]): Record<string, string> {
 }
 
 /**
- * Normalizza un URL profilo LinkedIn. Ritorna null se non valido/non riconducibile.
+ * Normalizes a LinkedIn profile URL. Returns null if invalid or not recognizable.
  *
- * `inferred` segnala che l'input era uno *slug nudo* ("mario-rossi") e non un URL:
- * qualunque parola con soli caratteri da slug diventa un URL sintatticamente valido,
- * quindi un refuso in una colonna sbagliata passerebbe silenziosamente come profilo.
- * Chi importa deve poterlo sapere.
+ * `inferred` flags that the input was a *bare slug* ("mario-rossi") rather than a URL:
+ * any word made only of slug-legal characters turns into a syntactically valid URL,
+ * so a typo sitting in the wrong column would sail through silently as a profile.
+ * Whoever runs the import deserves to know about it.
  */
 export function normalizeProfileUrl(
   raw: string,
@@ -57,7 +57,7 @@ export function normalizeProfileUrl(
   if (!s) return null;
 
   let inferred = false;
-  // slug nudo tipo "in/mario-rossi" o "mario-rossi"
+  // bare slug such as "in/mario-rossi" or "mario-rossi"
   if (!/^https?:\/\//i.test(s)) {
     s = s.replace(/^\/+/, '');
     if (s.startsWith('in/')) s = `https://www.linkedin.com/${s}`;
@@ -77,7 +77,7 @@ export function normalizeProfileUrl(
 
   const m = u.pathname.match(/\/in\/([^/]+)/i);
   const publicId = m && m[1] ? decodeURIComponent(m[1]) : null;
-  // URL canonico, senza query/fragment
+  // canonical URL, without query/fragment
   const path = publicId ? `/in/${encodeURIComponent(publicId)}/` : u.pathname;
   const url = `https://www.linkedin.com${path}`;
   return { url, publicId, inferred };
@@ -87,7 +87,7 @@ export interface ImportResult {
   total: number;
   valid: ContactInput[];
   invalid: { row: number; reason: string }[];
-  /** Righe in cui l'URL è stato ricostruito da uno slug nudo: da verificare. */
+  /** Rows whose URL was rebuilt from a bare slug: worth double-checking. */
   inferred: { row: number; input: string; url: string }[];
 }
 
@@ -119,7 +119,7 @@ export function parseCsvBuffer(content: string, source: string): ImportResult {
     const rawUrl = canon.profile_url ?? '';
     const norm = normalizeProfileUrl(rawUrl);
     if (!norm) {
-      invalid.push({ row: i + 2, reason: 'URL profilo LinkedIn mancante o non valido' });
+      invalid.push({ row: i + 2, reason: 'Missing or invalid LinkedIn profile URL' });
       return;
     }
     if (norm.inferred) inferred.push({ row: i + 2, input: rawUrl.trim(), url: norm.url });

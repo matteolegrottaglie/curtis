@@ -1,7 +1,7 @@
 // ============================================================
-//  SOLA LETTURA. Apre i profili e legge lo stato dell'invito con
-//  il probe nuovo. NON clicca niente, non invia niente.
-//  Serve a sapere CHI ha davvero ancora il "Connect" prima di agire.
+//  READ ONLY. Opens the profiles and reads the invite state with
+//  the new probe. Clicks nothing, sends nothing.
+//  It tells you WHO really still has a "Connect" before acting.
 // ============================================================
 import { readFileSync } from 'node:fs';
 import { LinkedInSession } from '../src/browser/session.js';
@@ -18,11 +18,11 @@ const targets = JSON.parse(readFileSync(process.argv[2]!, 'utf8')) as Array<{
 const session = new LinkedInSession();
 await session.launch();
 if (!(await session.isLoggedIn())) {
-  console.error('✖ NON loggato — mi fermo, nessuna azione');
+  console.error('✖ NOT logged in — stopping, no action taken');
   await session.close();
   process.exit(2);
 }
-console.log('✓ sessione LinkedIn attiva\n');
+console.log('✓ LinkedIn session active\n');
 
 for (const t of targets) {
   const p = session.page!;
@@ -32,7 +32,7 @@ for (const t of targets) {
 
   const sig = await detectGuards(p);
   if (sig) {
-    console.log(`${t.full_name}\n   ⛔ BLOCCO: ${sig.kind} — ${sig.detail ?? ''}\n`);
+    console.log(`${t.full_name}\n   ⛔ BLOCKED: ${sig.kind} — ${sig.detail ?? ''}\n`);
     break;
   }
   await H.humanScroll(p, randInt(1, 2));
@@ -47,27 +47,27 @@ for (const t of targets) {
       const inMenu = await S.probeTopCard(p, tokens, 10_000);
       if (inMenu.kind !== 'none' || inMenu.labels.connected) {
         probe = { ...inMenu, labels: { ...probe.labels, ...inMenu.labels } };
-        via = 'menu Altro';
+        via = 'More menu';
       }
       await p.keyboard.press('Escape').catch(() => {});
     }
   }
 
-  const stato =
-    probe.kind === 'pending' ? 'GIÀ PENDENTE' :
-    probe.kind === 'connect' ? `INVITABILE (${via})` :
-    probe.labels.connected || probe.labels.message ? 'GIÀ COLLEGATO (1° grado)' : 'INDETERMINATO';
+  const status =
+    probe.kind === 'pending' ? 'ALREADY PENDING' :
+    probe.kind === 'connect' ? `CAN INVITE (${via})` :
+    probe.labels.connected || probe.labels.message ? 'ALREADY CONNECTED (1st degree)' : 'UNDETERMINED';
 
-  console.log(`${t.full_name}  →  ${stato}`);
+  console.log(`${t.full_name}  →  ${status}`);
   console.log(`   url      : ${t.profile_url}`);
   console.log(`   label    : ${probe.label ?? '—'}`);
   console.log(`   labels   : ${JSON.stringify(probe.labels)}`);
   if (probe.kind === 'none' && !probe.labels.connected && !probe.labels.message) {
-    console.log(`   viste    : ${JSON.stringify(probe.sample)}`);
+    console.log(`   seen     : ${JSON.stringify(probe.sample)}`);
   }
   console.log();
   await H.shortPause(4000, 8000);
 }
 
 await session.close();
-console.log('— probe terminato, NESSUNA azione eseguita —');
+console.log('— probe finished, NO action performed —');

@@ -1,12 +1,12 @@
 // ============================================================
-//  Configurazione: infrastruttura + default di sicurezza.
+//  Configuration: infrastructure + safety defaults.
 //
-//  A differenza del progetto originale (dashboard lanciata dalla
-//  cartella del repo), qui il binario `lksq` è installato
-//  globalmente: la working directory è arbitraria, quindi i dati
-//  vivono in una directory dell'utente, non in `./data`.
+//  Unlike the original project (a dashboard launched from the repo
+//  folder), here the `lksq` binary is installed globally: the
+//  working directory is arbitrary, so the data lives in a user
+//  directory, not in `./data`.
 //
-//  Ordine di risoluzione: process.env  ->  <dataDir>/.env  ->  default.
+//  Resolution order: process.env  ->  <dataDir>/.env  ->  defaults.
 // ============================================================
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -14,21 +14,21 @@ import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import type { SafetyConfig, ControllerState } from './types.js';
 
-/** Espande un `~` iniziale e restituisce un path assoluto. */
+/** Expands a leading `~` and returns an absolute path. */
 function expandHome(p: string): string {
   return resolve(p.startsWith('~/') || p === '~' ? join(homedir(), p.slice(1)) : p);
 }
 
 /**
- * Directory dati: DB SQLite, profilo browser (sessione LinkedIn), token,
- * screenshot e log. Sovrascrivibile con `LKSQ_DATA_DIR` — è anche il modo
- * per riusare i dati del progetto originale puntando alla sua `./data`.
+ * Data directory: SQLite DB, browser profile (LinkedIn session), token,
+ * screenshots and logs. Overridable with `LKSQ_DATA_DIR` — which is also how
+ * you reuse the original project's data by pointing at its `./data`.
  */
 export const DATA_DIR: string = process.env.LKSQ_DATA_DIR?.trim()
   ? expandHome(process.env.LKSQ_DATA_DIR.trim())
   : join(homedir(), '.linkedin-sequencer-mcp');
 
-// --- mini parser .env (nessuna dipendenza) ---
+// --- mini .env parser (no dependencies) ---
 function loadDotEnv(dir: string): void {
   const p = join(dir, '.env');
   if (!existsSync(p)) return;
@@ -41,13 +41,13 @@ function loadDotEnv(dir: string): void {
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
     }
-    // process.env ha la precedenza: il file non sovrascrive mai l'ambiente.
+    // process.env wins: the file never overrides the environment.
     if (process.env[key] === undefined) process.env[key] = val;
   }
 }
 loadDotEnv(DATA_DIR);
 
-/** Percorsi in cui cercare un Google Chrome installato dal sistema. */
+/** Places to look for a system-installed Google Chrome. */
 const SYSTEM_CHROME_PATHS: Record<string, string[]> = {
   darwin: ['/Applications/Google Chrome.app'],
   linux: ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/opt/google/chrome/chrome'],
@@ -58,15 +58,15 @@ const SYSTEM_CHROME_PATHS: Record<string, string[]> = {
 };
 
 /**
- * Quale browser far pilotare a Playwright.
+ * Which browser Playwright should drive.
  *
- * Senza scelta esplicita si preferisce il **Chrome di sistema**, quando c'è:
- * il Chromium incluso in Playwright va scaricato a parte con
- * `playwright install`, e un'installazione fresca non ce l'ha — il primo
- * login fallirebbe con un errore incomprensibile pur avendo Chrome sul Mac.
- * Il Chrome vero ha anche un fingerprint più autentico.
+ * Without an explicit choice we prefer the **system Chrome** when there is
+ * one: the Chromium bundled with Playwright has to be downloaded separately
+ * with `playwright install`, and a fresh install does not have it — the first
+ * login would fail with an inscrutable error even though Chrome is right
+ * there on the Mac. Real Chrome also has a more authentic fingerprint.
  *
- * `BROWSER_CHANNEL=chromium` forza comunque quello di Playwright.
+ * `BROWSER_CHANNEL=chromium` forces Playwright's own build anyway.
  */
 function resolveBrowserChannel(): string | undefined {
   const explicit = process.env.BROWSER_CHANNEL?.trim();
@@ -80,7 +80,7 @@ export interface AppConfig {
   port: number;
   dataDir: string;
   timezone: string;
-  /** Mostra la finestra del browser durante il lavoro (login a parte). */
+  /** Show the browser window while working (login aside). */
   visibleBrowser: boolean;
   browserChannel: string | undefined;
   autoConnect: boolean;
@@ -88,22 +88,22 @@ export interface AppConfig {
 }
 
 export const appConfig: AppConfig = {
-  // Il server MCP resta sempre in loopback: espone azioni che agiscono
-  // sull'account LinkedIn dell'utente, non va mai messo in ascolto pubblico.
+  // The MCP server always stays on loopback: it exposes actions that act on
+  // the user's LinkedIn account, it must never listen publicly.
   host: '127.0.0.1',
   port: Number(process.env.LKSQ_PORT ?? 4311),
   dataDir: DATA_DIR,
   timezone: process.env.TIMEZONE ?? 'Europe/Rome',
-  // Default: il browser lavora in background. La finestra si apre solo per
-  // il login, dove l'utente deve poter digitare. Con HEADFUL=true resta
-  // visibile sempre (utile per capire perché un selettore non aggancia).
+  // Default: the browser works in the background. The window only opens for
+  // login, where the user has to be able to type. With HEADFUL=true it stays
+  // visible always (handy for figuring out why a selector isn't matching).
   visibleBrowser: (process.env.HEADFUL ?? 'false') === 'true',
   browserChannel: resolveBrowserChannel(),
   autoConnect: (process.env.AUTO_CONNECT ?? 'true') !== 'false',
   autostartEngine: (process.env.AUTOSTART_ENGINE ?? 'false') === 'true',
 };
 
-/** Path dei file di servizio dentro la data dir. */
+/** Paths of the service files inside the data dir. */
 export const paths = {
   db: join(DATA_DIR, 'sequencer.db'),
   browserProfile: join(DATA_DIR, 'browser-profile'),
@@ -121,14 +121,14 @@ export function ensureDataDir(): void {
 }
 
 /**
- * Token bearer che protegge l'endpoint MCP locale.
+ * Bearer token protecting the local MCP endpoint.
  *
- * Serve davvero: un server HTTP in loopback è raggiungibile da qualunque
- * processo — e da qualunque pagina web aperta nel browser dell'utente se
- * l'anti DNS-rebinding fallisse. Chi lo raggiunge può mandare inviti e
- * messaggi a nome dell'utente. Generato al primo avvio, 0600.
+ * It genuinely matters: an HTTP server on loopback is reachable by any
+ * process — and by any web page open in the user's browser should the
+ * anti DNS-rebinding check fail. Whoever reaches it can send invites and
+ * messages in the user's name. Generated on first run, 0600.
  *
- * Con `LKSQ_NO_AUTH=1` l'autenticazione è disattivata (solo per debug).
+ * With `LKSQ_NO_AUTH=1` authentication is disabled (debug only).
  */
 export function getAuthToken(): string | null {
   if (process.env.LKSQ_NO_AUTH === '1') return null;
@@ -142,38 +142,38 @@ export function getAuthToken(): string | null {
   return token;
 }
 
-/** URL dell'endpoint MCP di questa installazione. */
+/** URL of this installation's MCP endpoint. */
 export function mcpUrl(): string {
   return `http://${appConfig.host}:${appConfig.port}/mcp`;
 }
 
 // ============================================================
-//  Default di sicurezza — conservativi per account FREE.
-//  Vengono salvati nel DB alla prima esecuzione e poi modificati
-//  dai tool MCP (`update_safety_settings`).
+//  Safety defaults — conservative, tuned for FREE accounts.
+//  They are stored in the DB on first run and edited afterwards
+//  through the MCP tools (`update_safety_settings`).
 // ============================================================
 export const DEFAULT_SAFETY_CONFIG: SafetyConfig = {
   timezone: appConfig.timezone,
-  workingDays: [1, 2, 3, 4, 5], // lun-ven
+  workingDays: [1, 2, 3, 4, 5], // Mon-Fri
   workStartHour: 9,
   workEndHour: 18,
 
   accountAgeDays: null,
   connectionCount: null,
 
-  // Tetto "duro" scelto per prudenza: LinkedIn NON pubblica un limite
-  // numerico di inviti. Alzalo solo col tempo e guardando l'acceptance rate.
+  // A "hard" ceiling picked out of caution: LinkedIn does NOT publish a
+  // numeric invite limit. Raise it only over time, watching the acceptance rate.
   weeklyInviteCeiling: 100,
 
-  warmupStartDate: null, // impostata al primo avvio se assente
+  warmupStartDate: null, // set on first run if missing
   rampStartWeekOffset: 0,
   ramp: [
-    { week: 1, dailyInvites: 12 }, // ~60/sett
-    { week: 2, dailyInvites: 16 }, // ~80/sett
+    { week: 1, dailyInvites: 12 }, // ~60/week
+    { week: 2, dailyInvites: 16 }, // ~80/week
     { week: 3, dailyInvites: 18 },
-    { week: 4, dailyInvites: 20 }, // ~100/sett (tocca il tetto di default)
+    { week: 4, dailyInvites: 20 }, // ~100/week (hits the default ceiling)
     { week: 5, dailyInvites: 22 },
-    { week: 6, dailyInvites: 25 }, // oltre serve alzare weeklyInviteCeiling + trust
+    { week: 6, dailyInvites: 25 }, // beyond this you need a higher weeklyInviteCeiling + trust
   ],
 
   minAcceptanceRate: 0.4,
@@ -183,7 +183,7 @@ export const DEFAULT_SAFETY_CONFIG: SafetyConfig = {
   cleanDaysToRecover: 3,
 
   caps: {
-    invites: 30, // tetto assoluto di sicurezza (la rampa di solito sta sotto)
+    invites: 30, // absolute safety ceiling (the ramp usually stays below it)
     messages: 40,
     visits: 60,
     follows: 25,
@@ -194,13 +194,13 @@ export const DEFAULT_SAFETY_CONFIG: SafetyConfig = {
   delays: {
     betweenActionsMin: 40_000, // 40s
     betweenActionsMax: 200_000, // ~3.3 min
-    longBreakEveryMin: 6, // dopo 6-12 azioni...
+    longBreakEveryMin: 6, // after 6-12 actions...
     longBreakEveryMax: 12,
-    longBreakMin: 8 * 60_000, // ...pausa 8-25 min
+    longBreakMin: 8 * 60_000, // ...take an 8-25 min break
     longBreakMax: 25 * 60_000,
   },
 
-  sendNoteOnConnect: false, // FREE: nota -> solo 5 inviti/mese. Personalizza nel 1° messaggio.
+  sendNoteOnConnect: false, // FREE: a note -> only 5 invites/month. Personalize in the 1st message.
 
   autoWithdrawAfterDays: 21,
   maxPendingBacklog: 500,

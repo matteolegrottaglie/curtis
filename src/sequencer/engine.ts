@@ -1,15 +1,15 @@
 // ============================================================
-//  Engine: il worker loop che orchestra tutto.
+//  Engine: the worker loop that orchestrates everything.
 //
-//  Ad ogni "tick":
-//   1. ricalcola i limiti del giorno (controller adattivo)
-//   2. rispetta halt / pausa / finestra oraria / login
-//   3. avanza gli step "wait" (istantanei)
-//   4. esegue UNA azione browser permessa, poi pausa umana
-//   5. ogni N azioni, pausa lunga
+//  On every "tick":
+//   1. recompute today's limits (adaptive controller)
+//   2. honour halt / pause / working window / login
+//   3. advance the "wait" steps (instantaneous)
+//   4. run ONE allowed browser action, then a human pause
+//   5. every N actions, take a long break
 //
-//  È volutamente lento: una azione alla volta, con ritardi
-//  randomici. La lentezza È la sicurezza.
+//  It is deliberately slow: one action at a time, with random
+//  delays. The slowness IS the safety.
 // ============================================================
 import * as repo from '../db/repo.js';
 import * as controller from '../safety/controller.js';
@@ -42,7 +42,7 @@ function kindForStep(step: Step): ActionKind | null {
     case 'wait_accept':
       return 'check_accepted';
     case 'wait':
-      return null; // gestito a parte (istantaneo)
+      return null; // handled separately (instantaneous)
   }
 }
 
@@ -54,7 +54,7 @@ export interface AuthStatus {
   avatar: string | null;
 }
 
-/** Estrae gli override per-campagna dal campo settings JSON; tollerante a JSON malformato. */
+/** Extracts the per-campaign overrides from the settings JSON field; tolerates malformed JSON. */
 function parseCampaignOverrides(settingsJson: string | null): CampaignOverrides {
   if (!settingsJson) return {};
   try {
@@ -64,7 +64,7 @@ function parseCampaignOverrides(settingsJson: string | null): CampaignOverrides 
   }
 }
 
-/** Sovrappone i campi per-campagna onorati dall'engine sopra alla SafetyConfig globale. */
+/** Layers the per-campaign fields the engine honours on top of the global SafetyConfig. */
 function effectiveConfig(global: SafetyConfig, ov: CampaignOverrides): SafetyConfig {
   const out: SafetyConfig = { ...global };
   if (ov.delays) out.delays = { ...global.delays, ...ov.delays };
@@ -126,20 +126,20 @@ export class Engine {
     if (!cfg.warmupStartDate) {
       cfg.warmupStartDate = isoDate(cfg.timezone);
       repo.saveSafetyConfig(cfg);
-      log.info({ start: cfg.warmupStartDate }, 'warm-up iniziato oggi');
+      log.info({ start: cfg.warmupStartDate }, 'warm-up started today');
     }
-    // riprende da eventuale pausa
+    // resume from any pause
     const st = repo.getControllerState();
     st.paused = false;
     repo.saveControllerState(st);
 
     this.breakThreshold = nextBreakThreshold(cfg);
-    // Se il login aveva aperto la finestra, qui si torna in background:
-    // durante il lavoro non deve comparire nulla sullo schermo dell'utente.
+    // If the login flow had opened a window, we go back to headless here:
+    // while working, nothing should show up on the user's screen.
     await this.session.launch();
     emitEvent('status', this.status());
     this.loopHandle = this.loop();
-    log.info('engine avviato');
+    log.info('engine started');
   }
 
   async stop(): Promise<void> {
@@ -148,7 +148,7 @@ export class Engine {
     await this.loopHandle?.catch(() => {});
     await this.session.close();
     emitEvent('status', this.status());
-    log.info('engine fermato');
+    log.info('engine stopped');
   }
 
   pause(): void {
@@ -160,7 +160,7 @@ export class Engine {
     emitEvent('status', this.status());
   }
 
-  // ---- Autenticazione (gestita dal tab "Account") ----
+  // ---- Authentication (driven from the "Account" tab) ----
   async authStatus(): Promise<AuthStatus> {
     if (!this.session.context) return { launched: false, loggedIn: false, busy: false, account: null, avatar: null };
     if (this.running) return { launched: true, loggedIn: this.lastLoggedIn, busy: true, account: this.account, avatar: this.avatar };
@@ -193,7 +193,7 @@ export class Engine {
   }
 
   async logout(): Promise<AuthStatus> {
-    if (this.running) throw new Error("Ferma l'engine prima di disconnetterti");
+    if (this.running) throw new Error('Stop the engine before logging out');
     await this.session.launch();
     await this.session.clearSession();
     this.lastLoggedIn = false;
@@ -201,7 +201,7 @@ export class Engine {
     return this.authStatus();
   }
 
-  /** All'avvio del tool: riusa la sessione salvata, così risulti "Connesso" senza login. */
+  /** On tool start-up: reuse the saved session, so you show up as "Connected" without logging in. */
   async connectSavedSession(): Promise<void> {
     if (this.running || this.session.context) return;
     try {
@@ -214,13 +214,13 @@ export class Engine {
           .catch(() => {});
         this.account = await this.session.getAccountName();
         this.avatar = await this.session.getAvatarUrl();
-        log.info({ account: this.account ?? '?' }, 'sessione LinkedIn riconnessa automaticamente');
+        log.info({ account: this.account ?? '?' }, 'LinkedIn session reconnected automatically');
       } else {
         await this.session.gotoLogin();
-        log.warn('nessuna sessione salvata valida: apri il tab "Account" e accedi una volta');
+        log.warn('no valid saved session: open the "Account" tab and sign in once');
       }
     } catch (e) {
-      log.error({ err: String(e) }, 'auto-connect non riuscito (connettiti dal tab Account)');
+      log.error({ err: String(e) }, 'auto-connect failed (connect from the Account tab)');
     }
     emitEvent('status', this.status());
   }
@@ -230,7 +230,7 @@ export class Engine {
       try {
         await this.tick();
       } catch (e) {
-        log.error({ err: String(e) }, 'errore nel tick');
+        log.error({ err: String(e) }, 'error in tick');
         await sleep(15_000);
       }
     }
@@ -247,18 +247,18 @@ export class Engine {
     const state = repo.getControllerState();
 
     if (state.haltedReason) {
-      this.setNote(`HALT: ${state.haltedReason} — intervieni e premi "Riprendi sicurezza"`);
+      this.setNote(`HALT: ${state.haltedReason} — step in and press "Resume safety"`);
       await sleep(60_000);
       return;
     }
     if (state.paused) {
-      this.setNote('in pausa');
+      this.setNote('paused');
       await sleep(15_000);
       return;
     }
     if (!inWorkingWindow(cfg)) {
       const next = nextWindowOpen(cfg);
-      this.setNote(`fuori orario lavorativo, riprendo intorno alle ${new Date(next).toLocaleString('it-IT')}`);
+      this.setNote(`outside working hours, resuming around ${new Date(next).toLocaleString('it-IT')}`);
       await sleep(Math.min(10 * MIN, Math.max(30_000, next - Date.now())));
       return;
     }
@@ -267,7 +267,7 @@ export class Engine {
     const logged = await this.session.isLoggedIn();
     this.lastLoggedIn = logged;
     if (!logged) {
-      this.setNote('login richiesto: vai al tab "Account" e accedi con Google nella finestra del browser');
+      this.setNote('login required: go to the "Account" tab and sign in with Google in the browser window');
       await this.session.page
         ?.goto('https://www.linkedin.com/login', { waitUntil: 'domcontentloaded' })
         .catch(() => {});
@@ -275,30 +275,30 @@ export class Engine {
       return;
     }
 
-    // pausa lunga periodica
+    // periodic long break
     if (this.actionsSinceBreak >= this.breakThreshold) {
-      this.setNote('pausa lunga (caffè)');
-      log.info('pausa lunga');
+      this.setNote('long break (coffee)');
+      log.info('long break');
       await longBreak(cfg);
       this.actionsSinceBreak = 0;
       this.breakThreshold = nextBreakThreshold(cfg);
     }
 
-    // scegli ed esegui
+    // pick and run
     const picked = this.pickBrowserAction();
     if (!picked) {
-      this.setNote('niente di pronto: attendo nuova attività / finestra limiti');
+      this.setNote('nothing ready: waiting for new activity / limit window');
       await sleep(randInt(30_000, 90_000));
       return;
     }
 
     await this.execute(picked.item, picked.step, picked.kind);
     this.actionsSinceBreak++;
-    // Delay per-campagna se l'override è presente, altrimenti delays globali.
+    // Per-campaign delays when the override is set, otherwise the global delays.
     await humanPause(effectiveConfig(cfg, picked.overrides));
   }
 
-  /** Avanza gli step 'wait' (istantanei) e ritorna la prima azione browser permessa. */
+  /** Advances the 'wait' steps (instantaneous) and returns the first allowed browser action. */
   private pickBrowserAction(): {
     item: DueEnrollment;
     step: Step;
@@ -321,15 +321,15 @@ export class Engine {
       const kind = kindForStep(step);
       if (!kind) continue;
       const overrides = parseCampaignOverrides(it.campaign.settings);
-      // Finestra oraria per-campagna: restrizione aggiuntiva alla globale (la globale è già
-      // stata verificata in tick(); qui salto le campagne con una finestra propria chiusa adesso).
+      // Per-campaign working window: an extra restriction on top of the global one (the global
+      // one was already checked in tick(); here we skip campaigns whose own window is shut now).
       const hasOwnWindow =
         overrides.workingDays ||
         overrides.workStartHour !== undefined ||
         overrides.workEndHour !== undefined ||
         overrides.timezone;
       if (hasOwnWindow && !inWorkingWindow(effectiveConfig(repo.getSafetyConfig(), overrides))) continue;
-      // Se la campagna ha un cap specifico per questo kind, lo passo al controller.
+      // If the campaign has a cap of its own for this kind, hand it to the controller.
       const capKey = controller.capKeyFor(kind);
       const perCampaignCap = capKey ? overrides.caps?.[capKey] : undefined;
       const perCampaign =
@@ -347,7 +347,7 @@ export class Engine {
     this.advance(it, steps, it.enrollment.current_step + 1, jittered, { status: 'in_progress' });
   }
 
-  /** Imposta lo step successivo e schedula quando sarà "due". */
+  /** Sets the next step and schedules when it will be "due". */
   private advance(
     it: DueEnrollment,
     steps: Step[],
@@ -373,10 +373,10 @@ export class Engine {
           delay = randInt(18, 30) * H;
           break;
         case 'wait':
-          delay = 0; // verrà applicato al prossimo tick
+          delay = 0; // will be applied on the next tick
           break;
         default:
-          delay = randInt(15, 90) * MIN; // spaziatura intra-sequenza
+          delay = randInt(15, 90) * MIN; // intra-sequence spacing
       }
     }
     repo.updateEnrollment(it.enrollment.id, {
@@ -421,10 +421,10 @@ export class Engine {
           res = await actions.checkAccepted(this.session, contact);
           break;
         default:
-          res = { status: 'skipped', detail: 'step non gestito' };
+          res = { status: 'skipped', detail: 'unhandled step' };
       }
     } catch (err) {
-      res = { status: 'failed', detail: `eccezione: ${String(err)}` };
+      res = { status: 'failed', detail: `exception: ${String(err)}` };
     }
 
     repo.logAction({
@@ -444,16 +444,16 @@ export class Engine {
       campaign: campaign.name,
     });
 
-    // segnale di LinkedIn -> controller
+    // signal from LinkedIn -> controller
     if (res.status === 'blocked' && res.signal) {
       controller.onSignal(res.signal.kind, res.signal.severity, res.signal.detail);
       emitEvent('signal', res.signal);
-      // non avanzare: riprova più tardi
+      // do not advance: retry later
       repo.updateEnrollment(e.id, { next_action_at: Date.now() + 1 * H });
       return;
     }
 
-    // gestione per tipo di step
+    // handling by step type
     await this.handleResult(item, step, steps, res);
   }
 
@@ -464,7 +464,7 @@ export class Engine {
     const retryOrFail = () => {
       const attempts = (e.attempts ?? 0) + 1;
       if (attempts >= 3) {
-        repo.updateEnrollment(e.id, { status: 'failed', attempts, last_error: res.detail ?? 'errore', next_action_at: null });
+        repo.updateEnrollment(e.id, { status: 'failed', attempts, last_error: res.detail ?? 'error', next_action_at: null });
       } else {
         repo.updateEnrollment(e.id, { attempts, last_error: res.detail ?? null, next_action_at: Date.now() + randInt(2, 6) * H });
       }
@@ -473,7 +473,7 @@ export class Engine {
     switch (step.type) {
       case 'connect': {
         if (res.status === 'success' || res.status === 'skipped') {
-          // skipped = invito già pendente: trattalo come inviato
+          // skipped = invite already pending: treat it as sent
           this.advance(item, steps, idx + 1, null, {
             status: 'connect_sent',
             connect_sent_at: e.connect_sent_at ?? Date.now(),
@@ -489,11 +489,11 @@ export class Engine {
         if (detail === 'accepted') {
           this.advance(item, steps, idx + 1, null, { status: 'accepted', accepted_at: Date.now() });
         } else if (expired) {
-          // scaduto: prova a ritirare l'invito (igiene backlog) e chiudi
+          // expired: try to withdraw the invite (backlog hygiene) and close out
           await this.maybeWithdraw(item);
           repo.updateEnrollment(e.id, { status: 'not_accepted', next_action_at: null, last_action_at: Date.now() });
         } else {
-          // ancora in attesa: ricontrolla domani
+          // still pending: check again tomorrow
           repo.updateEnrollment(e.id, { next_action_at: Date.now() + randInt(20, 28) * H, last_action_at: Date.now() });
         }
         break;
@@ -505,7 +505,7 @@ export class Engine {
       case 'visit':
       case 'follow':
       case 'like_recent':
-        // azioni "soft": anche se skipped, andiamo avanti
+        // "soft" actions: even if skipped, we move on
         if (res.status === 'success' || res.status === 'skipped') this.advance(item, steps, idx + 1, null);
         else retryOrFail();
         break;
@@ -514,7 +514,7 @@ export class Engine {
     }
   }
 
-  /** Ritiro best-effort dell'invito scaduto (se i limiti lo permettono). Sequenziale. */
+  /** Best-effort withdrawal of the expired invite (if the limits allow it). Sequential. */
   private async maybeWithdraw(item: DueEnrollment): Promise<void> {
     if (!controller.actionAllowedNow('withdraw').ok) return;
     const r = await actions.withdrawInvite(this.session, item.contact);

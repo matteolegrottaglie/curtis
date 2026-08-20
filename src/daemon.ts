@@ -1,13 +1,14 @@
 // ============================================================
-//  Daemon: un solo processo che possiede il database, il browser,
-//  il motore di sequenza e il server MCP.
+//  Daemon: a single process owning the database, the browser,
+//  the sequence engine and the MCP server.
 //
-//  Perché un daemon e non un server MCP che nasce e muore col client:
-//   - le campagne durano giorni (attese di accettazione, rampa),
-//     quindi il motore deve sopravvivere alla chiusura di Claude Code;
-//   - Playwright blocca il profilo browser a un solo processo: se il
-//     login, il motore e i tool girassero in processi diversi
-//     litigherebbero sulla stessa cartella.
+//  Why a daemon and not an MCP server that lives and dies with the
+//  client:
+//   - campaigns run for days (waiting for acceptances, the ramp), so
+//     the engine has to outlive Claude Code being closed;
+//   - Playwright locks the browser profile to a single process: if
+//     login, engine and tools ran in different processes they would
+//     fight over the same directory.
 // ============================================================
 import { writeFileSync, rmSync } from 'node:fs';
 import { appConfig, ensureDataDir, paths, getAuthToken } from './config.js';
@@ -27,13 +28,13 @@ export async function runDaemon(): Promise<void> {
   const { url } = await server.listen();
 
   writeFileSync(paths.pid, `${process.pid}\n`);
-  log.info({ version: VERSION, dataDir: appConfig.dataDir }, 'LinkedIn Sequencer MCP avviato');
-  log.info(`🔌 endpoint MCP: ${url}`);
+  log.info({ version: VERSION, dataDir: appConfig.dataDir }, 'LinkedIn Sequencer MCP started');
+  log.info(`🔌 MCP endpoint: ${url}`);
   if (getAuthToken() === null) {
-    log.warn('LKSQ_NO_AUTH=1: endpoint MCP SENZA autenticazione. Usalo solo per debug.');
+    log.warn('LKSQ_NO_AUTH=1: MCP endpoint with NO authentication. Debugging only.');
   }
 
-  // Tiene sveglia la macchina solo mentre il motore sta effettivamente lavorando.
+  // Keep the machine awake only while the engine is actually working.
   const awake = new KeepAwake();
   const awakeTimer = setInterval(() => {
     if (engine.isRunning() && !awake.active) awake.start();
@@ -42,13 +43,13 @@ export async function runDaemon(): Promise<void> {
   awakeTimer.unref();
 
   if (appConfig.autostartEngine) {
-    // Avvio non presidiato (servizio di sistema). Finestra oraria, rampa e cap
-    // restano attivi: qui si decide solo *quando parte il processo*.
-    // Un HALT di sicurezza sopravvive comunque al riavvio: è voluto.
-    log.info('autostart: avvio del motore (finestra oraria e limiti restano attivi)');
-    void engine.start().catch((e) => log.error({ err: String(e) }, 'autostart fallito'));
+    // Unattended start (system service). The working window, the ramp and the
+    // caps all stay in force: this only decides *when the process starts*.
+    // A safety HALT survives the restart regardless: that is deliberate.
+    log.info('autostart: starting the engine (working window and limits stay in force)');
+    void engine.start().catch((e) => log.error({ err: String(e) }, 'autostart failed'));
   } else if (appConfig.autoConnect) {
-    log.info('auto-connect: riuso della sessione LinkedIn salvata…');
+    log.info('auto-connect: reusing the saved LinkedIn session…');
     void engine.connectSavedSession();
   }
 
@@ -56,7 +57,7 @@ export async function runDaemon(): Promise<void> {
   const shutdown = async (sig: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log.info({ sig }, 'arresto in corso…');
+    log.info({ sig }, 'shutting down…');
     clearInterval(awakeTimer);
     awake.stop();
     await engine.stop().catch(() => {});

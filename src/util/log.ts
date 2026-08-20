@@ -1,5 +1,5 @@
 // ============================================================
-//  Logger (pino) con output leggibile in console.
+//  Logger (pino) with human-readable console output.
 // ============================================================
 import pino from 'pino';
 

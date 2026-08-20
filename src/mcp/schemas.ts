@@ -1,15 +1,15 @@
 // ============================================================
-//  Schemi zod condivisi dai tool MCP.
+//  Zod schemas shared by the MCP tools.
 //
-//  Sono gli stessi schemi che validavano le API REST della vecchia
-//  dashboard: qui diventano `inputSchema` dei tool, quindi le loro
-//  `.describe()` finiscono direttamente nel prompt del modello.
+//  They are the same schemas that validated the REST API of the old
+//  dashboard: here they become the tools' `inputSchema`, so their
+//  `.describe()` calls land straight in the model's prompt.
 // ============================================================
 import { z } from 'zod';
 
-// ---------------- Step di una sequenza ----------------
+// ---------------- Steps of a sequence ----------------
 export const stepSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('visit') }).describe('Visita il profilo (azione soft, scalda il contatto)'),
+  z.object({ type: z.literal('visit') }).describe('Visit the profile (soft action, warms the contact up)'),
   z
     .object({
       type: z.literal('connect'),
@@ -18,20 +18,20 @@ export const stepSchema = z.discriminatedUnion('type', [
         .max(300)
         .optional()
         .describe(
-          'Nota allegata all\'invito. Sconsigliata sugli account FREE: LinkedIn ne concede solo 5 al mese. Viene inviata solo se sendNoteOnConnect è true.',
+          'Note attached to the invitation. Not advised on FREE accounts: LinkedIn allows only 5 a month. It is sent only if sendNoteOnConnect is true.',
         ),
     })
-    .describe('Invia la richiesta di collegamento'),
+    .describe('Send the connection request'),
   z
     .object({ type: z.literal('wait_accept'), maxDays: z.number().int().min(1).max(60) })
-    .describe('Attendi che l\'invito venga accettato, ricontrollando ogni giorno, fino a maxDays'),
+    .describe('Wait for the invitation to be accepted, re-checking every day, up to maxDays'),
   z
     .object({
       type: z.literal('wait'),
       days: z.number().int().min(0).max(60).optional(),
       hours: z.number().int().min(0).max(72).optional(),
     })
-    .describe('Attesa fissa (con jitter ±10%)'),
+    .describe('Fixed wait (with ±10% jitter)'),
   z
     .object({
       type: z.literal('message'),
@@ -40,19 +40,19 @@ export const stepSchema = z.discriminatedUnion('type', [
         .min(1)
         .max(1900)
         .describe(
-          'Testo del messaggio. Placeholder: {firstName} {lastName} {fullName} {company} {headline} {location} {custom.COLONNA}. Spintax per variare: {Ciao|Salve|Buongiorno}.',
+          'Message text. Placeholders: {firstName} {lastName} {fullName} {company} {headline} {location} {custom.COLUMN_NAME}. Spintax for variety: {Hi|Hello|Good morning}.',
         ),
     })
-    .describe('Invia un messaggio diretto (richiede collegamento di 1° grado)'),
-  z.object({ type: z.literal('follow') }).describe('Segui la persona'),
+    .describe('Send a direct message (requires a 1st-degree connection)'),
+  z.object({ type: z.literal('follow') }).describe('Follow the person'),
   z
     .object({ type: z.literal('like_recent'), count: z.number().int().min(1).max(5).optional() })
-    .describe('Metti "mi piace" a un post recente'),
+    .describe('Like a recent post'),
 ]);
 
 export const stepsSchema = z.array(stepSchema).min(1);
 
-// ---------------- Config di sicurezza ----------------
+// ---------------- Safety config ----------------
 const rampSchema = z.object({
   week: z.number().int().min(1),
   dailyInvites: z.number().int().min(0).max(100),
@@ -76,7 +76,7 @@ const delaysSchema = z.object({
   longBreakMax: z.number().int().min(60_000),
 });
 
-/** Config completa: usata per validare il risultato di una patch prima di salvarlo. */
+/** Full config: used to validate the result of a patch before saving it. */
 export const safetyConfigSchema = z
   .object({
     timezone: z.string().min(1),
@@ -101,32 +101,32 @@ export const safetyConfigSchema = z
     maxPendingBacklog: z.number().int().min(50).max(2000),
   })
   .refine((c) => c.workEndHour > c.workStartHour, {
-    message: 'workEndHour deve essere > workStartHour',
+    message: 'workEndHour must be > workStartHour',
   })
   .refine((c) => c.delays.betweenActionsMax >= c.delays.betweenActionsMin, {
-    message: 'betweenActionsMax deve essere >= betweenActionsMin',
+    message: 'betweenActionsMax must be >= betweenActionsMin',
   })
   .refine((c) => c.delays.longBreakMax >= c.delays.longBreakMin, {
-    message: 'longBreakMax deve essere >= longBreakMin',
+    message: 'longBreakMax must be >= longBreakMin',
   })
   .refine((c) => c.delays.longBreakEveryMax >= c.delays.longBreakEveryMin, {
-    message: 'longBreakEveryMax deve essere >= longBreakEveryMin',
+    message: 'longBreakEveryMax must be >= longBreakEveryMin',
   });
 
 /**
- * Patch parziale: molto più comoda da chat ("abbassa gli inviti a 10 al giorno"
- * tocca un campo solo). Viene fusa sulla config corrente e poi validata come
- * config completa.
+ * Partial patch: far handier from chat ("lower the invitations to 10 a day"
+ * touches a single field). It is merged onto the current config and then
+ * validated as a full config.
  */
 export const safetyConfigPatchSchema = z.object({
-  timezone: z.string().min(1).optional().describe('Fuso orario IANA, es. Europe/Rome'),
+  timezone: z.string().min(1).optional().describe('IANA time zone, e.g. Europe/Rome'),
   workingDays: z
     .array(z.number().int().min(1).max(7))
     .min(1)
     .optional()
-    .describe('Giorni lavorativi, 1=lunedì … 7=domenica'),
-  workStartHour: z.number().min(0).max(23).optional().describe('Ora locale di inizio attività'),
-  workEndHour: z.number().min(1).max(24).optional().describe('Ora locale di fine attività'),
+    .describe('Working days, 1=Monday … 7=Sunday'),
+  workStartHour: z.number().min(0).max(23).optional().describe('Local hour activity starts'),
+  workEndHour: z.number().min(1).max(24).optional().describe('Local hour activity ends'),
   accountAgeDays: z.number().int().min(0).nullable().optional(),
   connectionCount: z.number().int().min(0).nullable().optional(),
   weeklyInviteCeiling: z
@@ -135,39 +135,39 @@ export const safetyConfigPatchSchema = z.object({
     .min(5)
     .max(700)
     .optional()
-    .describe('Tetto settimanale duro di inviti. Alzarlo aumenta il rischio: avvisa sempre l\'utente.'),
-  warmupStartDate: z.string().nullable().optional().describe('Data ISO YYYY-MM-DD di inizio warm-up'),
+    .describe('Hard weekly ceiling on invitations. Raising it raises the risk: always warn the user.'),
+  warmupStartDate: z.string().nullable().optional().describe('ISO date YYYY-MM-DD the warm-up starts'),
   rampStartWeekOffset: z
     .number()
     .int()
     .min(0)
     .max(52)
     .optional()
-    .describe('Salta avanti nella rampa se l\'account è già maturo (0 = parti dalla settimana 1)'),
-  ramp: z.array(rampSchema).min(1).optional().describe('Rampa di warm-up: inviti/giorno per settimana'),
+    .describe('Skip ahead in the ramp if the account is already mature (0 = start from week 1)'),
+  ramp: z.array(rampSchema).min(1).optional().describe('Warm-up ramp: invitations/day per week'),
   minAcceptanceRate: z
     .number()
     .min(0)
     .max(1)
     .optional()
-    .describe('Sotto questa soglia il controller riduce gli inviti (es. 0.4 = 40%)'),
+    .describe('Below this threshold the controller cuts invitations (e.g. 0.4 = 40%)'),
   backoffFactor: z.number().min(0.1).max(0.99).optional(),
   recoveryStepPct: z.number().min(0.01).max(1).optional(),
   backoffCooldownHours: z.number().min(1).max(168).optional(),
   cleanDaysToRecover: z.number().int().min(1).max(30).optional(),
-  caps: capsSchema.partial().optional().describe('Tetti giornalieri per tipo di azione'),
-  delays: delaysSchema.partial().optional().describe('Ritardi fra azioni, in millisecondi'),
+  caps: capsSchema.partial().optional().describe('Daily ceilings per action type'),
+  delays: delaysSchema.partial().optional().describe('Delays between actions, in milliseconds'),
   sendNoteOnConnect: z
     .boolean()
     .optional()
-    .describe('Allega la nota agli inviti. FALSE consigliato sugli account FREE (solo 5 note al mese).'),
+    .describe('Attach the note to invitations. FALSE advised on FREE accounts (only 5 notes a month).'),
   autoWithdrawAfterDays: z.number().int().min(3).max(90).optional(),
   maxPendingBacklog: z.number().int().min(50).max(2000).optional(),
 });
 
 export type SafetyConfigPatch = z.infer<typeof safetyConfigPatchSchema>;
 
-// ---------------- Override per-campagna ----------------
+// ---------------- Per-campaign overrides ----------------
 export const campaignSettingsSchema = z.object({
   sendNoteOnConnect: z.boolean().optional(),
   caps: capsSchema.partial().optional(),
@@ -178,12 +178,12 @@ export const campaignSettingsSchema = z.object({
   timezone: z.string().optional(),
 });
 
-// ---------------- Selezione contatti ----------------
+// ---------------- Contact selection ----------------
 export const contactSelectionSchema = {
   import_id: z
     .string()
     .optional()
-    .describe('ID restituito da import_contacts: seleziona tutti i contatti di quell\'import'),
-  contact_ids: z.array(z.string()).max(100_000).optional().describe('Lista esplicita di ID contatto'),
-  all: z.boolean().optional().describe('Tutti i contatti presenti nel database'),
+    .describe('ID returned by import_contacts: selects every contact from that import'),
+  contact_ids: z.array(z.string()).max(100_000).optional().describe('Explicit list of contact IDs'),
+  all: z.boolean().optional().describe('Every contact in the database'),
 };

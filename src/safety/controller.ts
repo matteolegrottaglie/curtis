@@ -1,17 +1,16 @@
 // ============================================================
-//  Adaptive Limit Controller — il "cuore" anti-ban.
+//  Adaptive Limit Controller — the heart of the safety system.
 //
-//  Ispirato all'"Activity Control" dei tool cloud: NON è una rampa
-//  statica, è un controllo a circuito chiuso che:
-//   - segue la rampa di warm-up (per settimane trascorse)
-//   - frena se l'acceptance rate scende sotto soglia
-//   - va in backoff sui segnali di LinkedIn (warning/limit)
-//   - si ferma del tutto su captcha/restrizione (halt)
-//   - recupera gradualmente i limiti dopo giorni "puliti"
+//  Not a static schedule: a closed-loop control that
+//   - follows the warm-up ramp (by weeks elapsed)
+//   - brakes when the acceptance rate falls below the threshold
+//   - backs off on LinkedIn signals (warning / limit)
+//   - stops entirely on a captcha or a restriction (halt)
+//   - recovers the limits gradually after "clean" days
 //
-//  Il tetto settimanale (`currentWeeklyCeiling`) è la manopola
-//  adattiva: scende sui segnali, risale piano quando tutto è ok,
-//  ma non supera mai `cfg.weeklyInviteCeiling`.
+//  The weekly ceiling (`currentWeeklyCeiling`) is the adaptive knob:
+//  it drops on signals, climbs back slowly while everything is fine,
+//  and never exceeds `cfg.weeklyInviteCeiling`.
 // ============================================================
 import { DateTime } from 'luxon';
 import * as repo from '../db/repo.js';
@@ -19,13 +18,13 @@ import type { ActionKind, ControllerState, SafetyConfig, SignalKind } from '../t
 import { weeksSince, isoDate, daysAgoMs } from '../util/time.js';
 import { log } from '../util/log.js';
 
-const HARD_MIN_WEEKLY = 20; // non scendere mai sotto, anche in backoff
+const HARD_MIN_WEEKLY = 20; // never go below this, not even while backing off
 
 function startOfDayMs(tz: string, at: number = Date.now()): number {
   return DateTime.fromMillis(at).setZone(tz).startOf('day').toMillis();
 }
 
-/** Mappa un ActionKind alla chiave corrispondente in caps. null per kind senza tetto. */
+/** Maps an ActionKind to its key in caps. null for kinds with no ceiling. */
 export function capKeyFor(kind: ActionKind): keyof SafetyConfig['caps'] | null {
   switch (kind) {
     case 'connect':
@@ -50,7 +49,7 @@ function capFor(cfg: SafetyConfig, kind: ActionKind): number {
   return k == null ? Number.MAX_SAFE_INTEGER : cfg.caps[k];
 }
 
-/** Target inviti/giorno previsto dalla rampa per la settimana corrente. */
+/** Invites/day the ramp calls for in the current week. */
 export function rampDailyTarget(cfg: SafetyConfig, at: number = Date.now()): number {
   const wk = weeksSince(cfg.warmupStartDate, cfg.timezone, at) + 1 + cfg.rampStartWeekOffset;
   const sorted = [...cfg.ramp].sort((a, b) => a.week - b.week);
@@ -59,7 +58,7 @@ export function rampDailyTarget(cfg: SafetyConfig, at: number = Date.now()): num
   return target;
 }
 
-/** Quante azioni di un certo tipo restano disponibili oggi. */
+/** How many actions of a given kind are still available today. */
 export function remainingToday(kind: ActionKind, at: number = Date.now()): number {
   const cfg = repo.getSafetyConfig();
   const state = repo.getControllerState();
@@ -81,8 +80,8 @@ export interface Permission {
 }
 
 /**
- * Può eseguire ORA un'azione di questo tipo?
- * Se `perCampaign` è passato, applica anche il tetto per-campagna in aggiunta a quelli globali.
+ * May an action of this kind run RIGHT NOW?
+ * When `perCampaign` is given, its ceiling applies on top of the global ones.
  */
 export function actionAllowedNow(
   kind: ActionKind,
@@ -93,24 +92,24 @@ export function actionAllowedNow(
   const state = repo.getControllerState();
 
   if (state.haltedReason) return { ok: false, reason: `HALT: ${state.haltedReason}` };
-  if (state.paused) return { ok: false, reason: 'in pausa (manuale)' };
+  if (state.paused) return { ok: false, reason: 'paused (manually)' };
 
   if (kind === 'connect') {
     if (state.backoffUntil && at < state.backoffUntil) {
       const mins = Math.round((state.backoffUntil - at) / 60000);
-      return { ok: false, reason: `backoff inviti per altri ~${mins} min` };
+      return { ok: false, reason: `invites backing off for another ~${mins} min` };
     }
     if (repo.pendingInvitesCount() >= cfg.maxPendingBacklog) {
-      return { ok: false, reason: `backlog inviti pendenti pieno (>= ${cfg.maxPendingBacklog})` };
+      return { ok: false, reason: `pending invite backlog full (>= ${cfg.maxPendingBacklog})` };
     }
   }
 
   if (remainingToday(kind, at) <= 0) {
-    return { ok: false, reason: `cap giornaliero raggiunto per "${kind}"` };
+    return { ok: false, reason: `daily cap reached for "${kind}"` };
   }
 
-  // Tetto per-campagna (override). Se la campagna ha un suo cap, conta solo le azioni
-  // di QUESTA campagna oggi e verifica che non lo abbia ancora raggiunto.
+  // Per-campaign ceiling (override). When a campaign sets its own cap, count only
+  // THIS campaign's actions today and check it has not reached the cap yet.
   if (perCampaign && perCampaign.cap > 0) {
     const since = startOfDayMs(cfg.timezone, at);
     const sentForCampaign = repo.countActions({
@@ -120,15 +119,15 @@ export function actionAllowedNow(
       campaign_id: perCampaign.campaignId,
     });
     if (sentForCampaign >= perCampaign.cap) {
-      return { ok: false, reason: `cap per-campagna raggiunto per "${kind}"` };
+      return { ok: false, reason: `per-campaign cap reached for "${kind}"` };
     }
   }
   return { ok: true };
 }
 
 /**
- * Da chiamare quando un guard rileva un segnale di LinkedIn.
- * Applica backoff / halt e abbassa il tetto adattivo.
+ * Call this when a guard detects a LinkedIn signal.
+ * Applies backoff or halt and lowers the adaptive ceiling.
  */
 export function onSignal(kind: SignalKind, severity: number, detail?: string, at: number = Date.now()): void {
   const cfg = repo.getSafetyConfig();
@@ -138,56 +137,56 @@ export function onSignal(kind: SignalKind, severity: number, detail?: string, at
   state.consecutiveCleanDays = 0;
 
   if (kind === 'captcha' || kind === 'restriction') {
-    // Stop totale: serve intervento umano.
+    // Full stop: a human has to step in.
     state.haltedReason = `${kind}${detail ? ' — ' + detail : ''}`;
-    log.error({ kind, detail }, 'HALT di sicurezza: intervieni manualmente su LinkedIn');
+    log.error({ kind, detail }, 'safety HALT: sort this out manually on LinkedIn');
   } else if (kind === 'weekly_limit') {
-    state.backoffUntil = at + 24 * 3600_000; // ricontrolla domani
+    state.backoffUntil = at + 24 * 3600_000; // check again tomorrow
     state.currentWeeklyCeiling = Math.max(
       HARD_MIN_WEEKLY,
       Math.floor(state.currentWeeklyCeiling * cfg.backoffFactor),
     );
-    log.warn({ ceiling: state.currentWeeklyCeiling }, 'limite settimanale LinkedIn: backoff inviti');
+    log.warn({ ceiling: state.currentWeeklyCeiling }, 'LinkedIn weekly limit: backing off invites');
   } else if (kind === 'warning' || kind === 'error') {
     state.backoffUntil = at + cfg.backoffCooldownHours * 3600_000;
     state.currentWeeklyCeiling = Math.max(
       HARD_MIN_WEEKLY,
       Math.floor(state.currentWeeklyCeiling * cfg.backoffFactor),
     );
-    log.warn({ kind, detail }, 'segnale di avviso: backoff e riduzione limiti');
+    log.warn({ kind, detail }, 'warning signal: backing off and lowering the limits');
   }
   repo.saveControllerState(state);
 }
 
 /**
- * Ricalcolo giornaliero: target del giorno, recupero graduale dei limiti,
- * gestione warm-up. Idempotente nello stesso giorno.
+ * Daily recomputation: today's target, gradual recovery of the limits,
+ * warm-up handling. Idempotent within the same day.
  */
 export function recomputeDaily(at: number = Date.now()): ControllerState {
   const cfg = repo.getSafetyConfig();
   const state = repo.getControllerState();
   const today = isoDate(cfg.timezone, at);
 
-  // Acceptance rate: se sotto soglia, frena.
+  // Acceptance rate: brake when it is below the threshold.
   const accept = repo.acceptanceRate(30, at);
   let base = rampDailyTarget(cfg, at);
   if (accept !== null && accept < cfg.minAcceptanceRate) {
     base = Math.max(1, Math.floor(base * cfg.backoffFactor));
     log.warn(
-      { acceptance: Number(accept.toFixed(2)), soglia: cfg.minAcceptanceRate },
-      'acceptance rate basso: target inviti ridotto. Migliora targeting/messaggio.',
+      { acceptance: Number(accept.toFixed(2)), threshold: cfg.minAcceptanceRate },
+      'low acceptance rate: invite target reduced. Improve the targeting or the message.',
     );
   }
   state.currentDailyTarget = Math.min(base, cfg.caps.invites);
 
-  // Cambio giorno → bookkeeping recupero.
+  // Day rollover -> recovery bookkeeping.
   if (state.lastAdjustedDate !== today) {
     const hadRecentSignal = state.lastSignalAt !== null && state.lastSignalAt >= daysAgoMs(1, at);
     if (hadRecentSignal) {
       state.consecutiveCleanDays = 0;
     } else {
       state.consecutiveCleanDays += 1;
-      // Recupero graduale del tetto verso il massimo configurato.
+      // Gradual recovery of the ceiling towards the configured maximum.
       if (
         state.consecutiveCleanDays >= cfg.cleanDaysToRecover &&
         state.currentWeeklyCeiling < cfg.weeklyInviteCeiling
@@ -197,22 +196,22 @@ export function recomputeDaily(at: number = Date.now()): ControllerState {
           cfg.weeklyInviteCeiling,
           state.currentWeeklyCeiling + step,
         );
-        log.info({ ceiling: state.currentWeeklyCeiling }, 'recupero limiti: tetto settimanale rialzato');
+        log.info({ ceiling: state.currentWeeklyCeiling }, 'limits recovering: weekly ceiling raised');
       }
     }
-    // Se il backoff è scaduto, azzeralo.
+    // Clear the backoff once it has expired.
     if (state.backoffUntil && at >= state.backoffUntil) state.backoffUntil = null;
     state.lastAdjustedDate = today;
   }
 
-  // Assicura che il tetto effettivo non superi quello configurato (es. dopo modifica da dashboard).
+  // Make sure the effective ceiling never exceeds the configured one (e.g. after a settings change).
   state.currentWeeklyCeiling = Math.min(state.currentWeeklyCeiling, cfg.weeklyInviteCeiling);
 
   repo.saveControllerState(state);
   return state;
 }
 
-// ---- Controlli manuali ----
+// ---- Manual controls ----
 export function pause(): void {
   const s = repo.getControllerState();
   s.paused = true;
@@ -228,5 +227,5 @@ export function clearHalt(): void {
   s.haltedReason = null;
   s.backoffUntil = null;
   repo.saveControllerState(s);
-  log.info('HALT azzerato manualmente');
+  log.info('HALT cleared manually');
 }

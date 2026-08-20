@@ -1,4 +1,4 @@
-// Template dei messaggi: placeholder, spintax, pulizia.
+// Message templates: placeholders, spintax, cleanup.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderTemplate, unknownPlaceholders } from '../src/sequencer/template.js';
@@ -23,41 +23,41 @@ function contact(over: Partial<Contact> = {}): Contact {
   };
 }
 
-test('sostituisce i placeholder noti', () => {
+test('substitutes the known placeholders', () => {
   const out = renderTemplate('Ciao {firstName} di {company}, {headline} a {location}?', contact());
   assert.equal(out, 'Ciao Mario di Acme, CEO @ Acme a Milano?');
 });
 
-test('deriva firstName da full_name quando first_name manca', () => {
-  const out = renderTemplate('Ciao {firstName}', contact({ first_name: null, full_name: 'Giulia Bianchi' }));
-  assert.equal(out, 'Ciao Giulia');
+test('derives firstName from full_name when first_name is missing', () => {
+  const out = renderTemplate('Hi {firstName}', contact({ first_name: null, full_name: 'Giulia Bianchi' }));
+  assert.equal(out, 'Hi Giulia');
 });
 
-test('legge le colonne extra da custom.*', () => {
-  const c = contact({ custom: JSON.stringify({ Settore: 'Software', Fonte: 'Fiera' }) });
-  assert.equal(renderTemplate('Vedo che lavori nel {custom.Settore}', c), 'Vedo che lavori nel Software');
-  assert.equal(renderTemplate('x{custom.NonEsiste}y', c), 'xy');
+test('reads the extra columns from custom.*', () => {
+  const c = contact({ custom: JSON.stringify({ Industry: 'Software', Source: 'Trade show' }) });
+  assert.equal(renderTemplate('I see you work in {custom.Industry}', c), 'I see you work in Software');
+  assert.equal(renderTemplate('x{custom.DoesNotExist}y', c), 'xy');
 });
 
-test('custom malformato non fa esplodere il rendering', () => {
-  const c = contact({ custom: '{non json' });
+test('malformed custom does not blow up the rendering', () => {
+  const c = contact({ custom: '{not json' });
   assert.equal(renderTemplate('a {custom.X} b', c), 'a b');
 });
 
-test('lo spintax sceglie una delle varianti', () => {
+test('spintax picks one of the variants', () => {
   const c = contact();
   const seen = new Set<string>();
-  for (let i = 0; i < 60; i++) seen.add(renderTemplate('{Ciao|Salve|Buongiorno} Mario', c));
-  assert.ok(seen.size > 1, 'lo spintax deve variare fra le esecuzioni');
-  for (const s of seen) assert.match(s, /^(Ciao|Salve|Buongiorno) Mario$/);
+  for (let i = 0; i < 60; i++) seen.add(renderTemplate('{Hi|Hello|Hey} Mario', c));
+  assert.ok(seen.size > 1, 'spintax must vary between runs');
+  for (const s of seen) assert.match(s, /^(Hi|Hello|Hey) Mario$/);
 });
 
-test('i placeholder vuoti non lasciano spazi doppi o prima della punteggiatura', () => {
+test('empty placeholders leave no double spaces or spaces before punctuation', () => {
   const c = contact({ company: null });
-  assert.equal(renderTemplate('Ciao {firstName} di {company} , come va?', c), 'Ciao Mario di, come va?');
+  assert.equal(renderTemplate('Hi {firstName} from {company} , how are you?', c), 'Hi Mario from, how are you?');
 });
 
-test('unknownPlaceholders segnala solo i placeholder non riconosciuti', () => {
+test('unknownPlaceholders reports only the unrecognized placeholders', () => {
   const found = unknownPlaceholders('Ciao {firstName} da {azienda}, {custom.X} {Ciao|Salve}');
   assert.deepEqual(found, ['azienda']);
 });

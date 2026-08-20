@@ -1,11 +1,11 @@
 // ============================================================
-//  Template dei messaggi/note.
-//  Supporta:
-//   - placeholder: {firstName} {lastName} {fullName} {company}
-//                  {headline} {location} {custom.NOME_COLONNA}
-//   - spintax:     {ciao|salve|buongiorno}  (scelta casuale)
-//  La variazione (spintax) è importante: messaggi identici inviati
-//  in massa sono uno dei segnali di bot più forti.
+//  Templating for messages/notes.
+//  Supports:
+//   - placeholders: {firstName} {lastName} {fullName} {company}
+//                   {headline} {location} {custom.COLUMN_NAME}
+//   - spintax:      {hi|hello|good morning}  (random pick)
+//  Variation (spintax) matters: identical messages blasted out
+//  in bulk are one of the strongest bot signals there is.
 // ============================================================
 import type { Contact } from '../types.js';
 import { pick } from '../util/rand.js';
@@ -46,16 +46,16 @@ function resolveField(c: Contact, key: string): string {
 }
 
 export function renderTemplate(tpl: string, c: Contact): string {
-  // Risolvi i {...}: se contiene '|' è spintax, altrimenti placeholder.
+  // Resolve the {...}: if it contains '|' it's spintax, otherwise a placeholder.
   const out = tpl.replace(/\{([^{}]*)\}/g, (_m, inner: string) => {
     if (inner.includes('|')) return (pick(inner.split('|')) ?? '').trim();
     return resolveField(c, inner.trim());
   });
-  // Pulizia spazi doppi lasciati da placeholder vuoti.
+  // Clean up the double spaces left behind by empty placeholders.
   return out.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
 }
 
-/** Validazione veloce: ci sono placeholder non riconosciuti? (solo per UX) */
+/** Quick validation: are there any unrecognised placeholders? (UX only) */
 export function unknownPlaceholders(tpl: string): string[] {
   const known = new Set(['firstName', 'lastName', 'fullName', 'company', 'headline', 'location']);
   const found: string[] = [];

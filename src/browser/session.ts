@@ -1,14 +1,14 @@
 // ============================================================
-//  Sessione browser persistente.
-//  - Profilo Chrome reale su disco (la sessione LinkedIn resta
-//    salvata: login una sola volta, niente token/cookie in chiaro).
-//  - In BACKGROUND di default: nessuna finestra che si muove sullo
-//    schermo dell'utente. La finestra si apre solo per il login.
-//    Non è il vecchio "headless facilmente rilevabile": si usa il Chrome
-//    di sistema, si riscrive lo User-Agent per togliere "Headless" e si
-//    riproducono i valori del display reale (vedi stealth.ts). Misurato:
-//    l'unica differenza residua dal browser visibile era colorDepth.
-//  - Login MANUALE (incluso 2FA/checkpoint): non gestiamo password.
+//  Persistent browser session.
+//  - Real Chrome profile on disk (the LinkedIn session stays
+//    saved: log in once, no plaintext tokens/cookies).
+//  - BACKGROUND by default: no window moving around on the
+//    user's screen. The window only opens for the login.
+//    This is not the old "trivially detectable headless": it uses the
+//    system Chrome, rewrites the User-Agent to drop "Headless" and
+//    replays the real display's values (see stealth.ts). Measured:
+//    the only difference left from the visible browser was colorDepth.
+//  - MANUAL login (2FA/checkpoint included): we never handle passwords.
 // ============================================================
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { join } from 'node:path';
@@ -22,7 +22,7 @@ import { randInt } from '../util/rand.js';
 const FEED_URL = 'https://www.linkedin.com/feed/';
 const LOGIN_URL = 'https://www.linkedin.com/login';
 
-/** Valori autentici osservati a finestra aperta, riusati poi in background. */
+/** Authentic values observed with the window open, later reused in background. */
 interface BrowserHints {
   userAgent?: string;
   colorDepth?: number;
@@ -40,7 +40,7 @@ function writeHints(patch: BrowserHints): void {
   try {
     writeFileSync(paths.browserHints, JSON.stringify({ ...readHints(), ...patch }, null, 2));
   } catch {
-    // best effort: senza cache si ricalcola al prossimo avvio
+    // best effort: without the cache it is recomputed on the next start
   }
 }
 
@@ -49,18 +49,18 @@ export class LinkedInSession {
   page: Page | null = null;
   #visible = false;
 
-  /** La finestra del browser è attualmente visibile all'utente? */
+  /** Is the browser window currently visible to the user? */
   get visible(): boolean {
     return this.#visible;
   }
 
   /**
-   * Avvia il browser nella modalità richiesta.
+   * Start the browser in the requested mode.
    *
-   * Cambiare modalità richiede di riavviare il contesto: una finestra già
-   * aperta non si può nascondere. Portarla fuori schermo con
-   * `--window-position` non funziona su macOS — il window server la riporta
-   * a bordo schermo (verificato: torna a x:0, y:30).
+   * Switching mode requires restarting the context: a window that is already
+   * open cannot be hidden. Pushing it off-screen with `--window-position`
+   * does not work on macOS — the window server drags it back to the edge of
+   * the screen (verified: it snaps back to x:0, y:30).
    */
   async launch(opts: { visible?: boolean } = {}): Promise<void> {
     const visible = opts.visible ?? appConfig.visibleBrowser;
@@ -71,7 +71,7 @@ export class LinkedInSession {
     await this.#open(visible);
   }
 
-  /** Porta il browser nella modalità richiesta, riavviandolo se necessario. */
+  /** Bring the browser into the requested mode, restarting it if needed. */
   async ensureMode(visible: boolean): Promise<void> {
     await this.launch({ visible });
   }
@@ -84,20 +84,20 @@ export class LinkedInSession {
 
     this.context = await chromium.launchPersistentContext(userDataDir, {
       headless: !visible,
-      channel: appConfig.browserChannel, // 'chrome' o undefined (chromium incluso)
+      channel: appConfig.browserChannel, // 'chrome' or undefined (bundled chromium)
       viewport: { width: 1440, height: 900 },
       locale: 'it-IT',
       timezoneId: appConfig.timezone,
       ...(ua ? { userAgent: ua } : {}),
       args: [
         '--disable-blink-features=AutomationControlled',
-        // Senza questo, in background outerWidth non combacia col viewport.
+        // Without this, in background outerWidth does not match the viewport.
         '--window-size=1440,900',
         ...(visible
           ? ['--start-maximized']
           : [
-              // Chrome rallenta timer e rendering delle finestre non visibili:
-              // significherebbe azioni che scadono a metà sequenza.
+              // Chrome throttles timers and rendering for non-visible windows:
+              // that would mean actions timing out halfway through a sequence.
               '--disable-backgrounding-occluded-windows',
               '--disable-renderer-backgrounding',
               '--disable-background-timer-throttling',
@@ -114,12 +114,12 @@ export class LinkedInSession {
     this.#visible = visible;
 
     if (visible) {
-      // Finestra vera: unico momento in cui si possono osservare i valori
-      // autentici di display e User-Agent, da riusare poi in background.
+      // A real window: the only moment when the authentic display and
+      // User-Agent values can be observed, to be reused later in background.
       await this.#captureHints();
     } else if (!userAgentOverride) {
-      // Cache assente o invecchiata (Chrome aggiornato): si ricava lo UA
-      // corretto e si riapre una volta sola.
+      // Cache missing or stale (Chrome got updated): derive the correct UA
+      // and reopen exactly once.
       const actual = await this.page.evaluate(() => navigator.userAgent).catch(() => '');
       if (/Headless/i.test(actual)) {
         const fixed = actual.replace(/HeadlessChrome/gi, 'Chrome');
@@ -133,13 +133,13 @@ export class LinkedInSession {
     log.info(
       {
         channel: appConfig.browserChannel ?? 'chromium',
-        modalita: visible ? 'finestra visibile' : 'background',
+        mode: visible ? 'visible window' : 'background',
       },
-      'browser avviato',
+      'browser started',
     );
   }
 
-  /** Registra i valori autentici del browser visibile, per usarli in background. */
+  /** Record the visible browser's authentic values, to reuse them in background. */
   async #captureHints(): Promise<void> {
     const observed = await this.page
       ?.evaluate(() => ({ userAgent: navigator.userAgent, colorDepth: screen.colorDepth }))
@@ -152,11 +152,11 @@ export class LinkedInSession {
   }
 
   private requirePage(): Page {
-    if (!this.page) throw new Error('sessione browser non avviata');
+    if (!this.page) throw new Error('browser session not started');
     return this.page;
   }
 
-  /** Il cookie di sessione `li_at` è la prova di autenticazione di LinkedIn. */
+  /** The `li_at` session cookie is LinkedIn's proof of authentication. */
   async hasAuthCookie(): Promise<boolean> {
     const ctx = this.context;
     if (!ctx) return false;
@@ -164,7 +164,7 @@ export class LinkedInSession {
     return cookies.some((c) => c.name === 'li_at' && !!c.value);
   }
 
-  /** Verifica login: prima il cookie (robusto ai cambi di DOM), poi fallback al feed. */
+  /** Login check: the cookie first (robust to DOM changes), then a feed fallback. */
   async isLoggedIn(): Promise<boolean> {
     if (await this.hasAuthCookie()) return true;
     const page = this.requirePage();
@@ -180,33 +180,33 @@ export class LinkedInSession {
   }
 
   /**
-   * Flusso di login manuale: apre la pagina di login e attende che
-   * l'utente completi (anche 2FA), fino a `timeoutMs`.
+   * Manual login flow: opens the login page and waits for the user to
+   * finish (2FA included), up to `timeoutMs`.
    */
   async waitForManualLogin(timeoutMs = 5 * 60_000): Promise<boolean> {
     const page = this.requirePage();
     if (await this.isLoggedIn()) {
-      log.info('già loggato');
+      log.info('already logged in');
       return true;
     }
     await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
-    log.warn('>>> Effettua il login a LinkedIn nella finestra del browser (anche eventuale 2FA). Attendo...');
+    log.warn('>>> Log in to LinkedIn in the browser window (including any 2FA). Waiting...');
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await sleep(3000);
       const url = page.url();
       if (!/\/(login|authwall|checkpoint|signup|uas)/.test(url)) {
         if (await this.isLoggedIn()) {
-          log.info('login completato e sessione salvata nel profilo');
+          log.info('login completed and session saved in the profile');
           return true;
         }
       }
     }
-    log.error('timeout login: riprova `npm run login`');
+    log.error('login timed out: try `npm run login` again');
     return false;
   }
 
-  /** Naviga alla pagina di login di LinkedIn (dove c'è "Continua con Google"). */
+  /** Navigate to the LinkedIn login page (the one with "Continue with Google"). */
   async gotoLogin(): Promise<void> {
     const page = this.page;
     if (!page) return;
@@ -221,13 +221,13 @@ export class LinkedInSession {
   }
 
   /**
-   * Verifica PASSIVA del login: NON naviga (così non interrompe il login
-   * manuale dell'utente). Controlla tutte le schede aperte e, se ne trova
-   * una loggata, la adotta come pagina attiva.
+   * PASSIVE login check: does NOT navigate (so it never interrupts the
+   * user's manual login). Inspects every open tab and, if it finds a
+   * logged-in one, adopts it as the active page.
    */
   async isLoggedInPassive(): Promise<boolean> {
     if (!(await this.hasAuthCookie())) return false;
-    // adotta una scheda LinkedIn "interna" come pagina attiva per le azioni
+    // adopt an "inner" LinkedIn tab as the active page for the actions
     const ctx = this.context;
     if (ctx) {
       for (const p of ctx.pages()) {
@@ -246,14 +246,14 @@ export class LinkedInSession {
     return true;
   }
 
-  /** Disconnette: cancella i cookie della sessione e torna al login. */
+  /** Sign out: clears the session cookies and goes back to the login page. */
   async clearSession(): Promise<void> {
     await this.context?.clearCookies();
     const page = this.page;
     if (page) await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
   }
 
-  /** Prova a leggere il nome dell'account loggato dalla nav (best-effort). */
+  /** Try to read the logged-in account name from the nav (best-effort). */
   async getAccountName(): Promise<string | null> {
     const page = this.page;
     if (!page) return null;
@@ -263,7 +263,7 @@ export class LinkedInSession {
     return null;
   }
 
-  /** Prova a leggere l'URL della foto profilo LinkedIn dalla nav (best-effort). */
+  /** Try to read the LinkedIn profile photo URL from the nav (best-effort). */
   async getAvatarUrl(): Promise<string | null> {
     const page = this.page;
     if (!page) return null;

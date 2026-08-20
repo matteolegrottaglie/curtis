@@ -1,5 +1,5 @@
 // ============================================================
-//  Tool sui contatti: import della lista, elenco, cancellazione.
+//  Contact tools: list import, listing, deletion.
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -18,19 +18,19 @@ export function registerContactTools(server: MCPServer): void {
   server.tool(
     {
       name: 'import_contacts',
-      title: 'Importa una lista di contatti',
+      title: 'Import a contact list',
       description:
-        "Importa contatti da un CSV, indicando il percorso del file sul disco dell'utente oppure incollando il contenuto. Serve almeno la colonna con l'URL del profilo LinkedIn (intestazioni riconosciute in italiano e inglese: profile_url, url, linkedin, profilo, link). Colonne riconosciute anche: nome/first_name, cognome/last_name, azienda/company, qualifica/headline, località/location, email. Ogni altra colonna diventa {custom.NOME_COLONNA}, usabile nei template dei messaggi. I duplicati (stesso profilo già in database) non vengono reinseriti ma fanno comunque parte dell'import. Restituisce un import_id da passare a enroll_contacts.",
+        "Imports contacts from a CSV, either by pointing at a file path on the user's disk or by pasting the content. At minimum you need the column holding the LinkedIn profile URL (headers recognised in both English and Italian: profile_url, url, linkedin, profilo, link). Also recognised: nome/first_name, cognome/last_name, azienda/company, qualifica/headline, località/location, email. Every other column becomes {custom.COLUMN_NAME}, usable in message templates. Duplicates (a profile already in the database) are not re-inserted but still count as part of the import. Returns an import_id to pass to enroll_contacts.",
       inputSchema: z.object({
-        file_path: z.string().optional().describe('Percorso assoluto del file CSV sul computer dell\'utente'),
-        csv_content: z.string().optional().describe('Contenuto CSV incollato direttamente (alternativa a file_path)'),
+        file_path: z.string().optional().describe('Absolute path of the CSV file on the user\'s computer'),
+        csv_content: z.string().optional().describe('CSV content pasted directly (alternative to file_path)'),
         preview_limit: z
           .number()
           .int()
           .min(0)
           .max(50)
           .optional()
-          .describe('Quanti contatti mostrare in anteprima (default 5)'),
+          .describe('How many contacts to show in the preview (default 5)'),
       }),
       outputSchema: z.object({
         import_id: z.string(),
@@ -56,21 +56,21 @@ export function registerContactTools(server: MCPServer): void {
           ...(preview_limit !== undefined ? { previewLimit: preview_limit } : {}),
         });
         const parts = [
-          `Import "${r.source}": ${r.contact_count} contatti utilizzabili (${r.inserted} nuovi, ${r.duplicates} già presenti).`,
+          `Import "${r.source}": ${r.contact_count} usable contacts (${r.inserted} new, ${r.duplicates} already present).`,
         ];
         if (r.rows_invalid > 0) {
-          parts.push(`${r.rows_invalid} righe scartate perché l'URL del profilo mancava o non era valido.`);
+          parts.push(`${r.rows_invalid} rows discarded because the profile URL was missing or invalid.`);
         }
         if (r.rows_url_inferred > 0) {
-          const sample = r.url_inferred_sample.slice(0, 3).map((x) => `riga ${x.row}: "${x.input}"`).join(', ');
+          const sample = r.url_inferred_sample.slice(0, 3).map((x) => `row ${x.row}: "${x.input}"`).join(', ');
           parts.push(
-            `⚠ ${r.rows_url_inferred} righe avevano solo uno slug e non un URL completo (${sample}): l'URL è stato ricostruito, verifica che siano profili reali prima di avviare la campagna.`,
+            `⚠ ${r.rows_url_inferred} rows had only a slug instead of a full URL (${sample}): the URL was reconstructed, check that these are real profiles before starting the campaign.`,
           );
         }
         parts.push(`import_id: ${r.import_id}`);
         return { content: [textBlock(parts.join(' '))], structuredContent: r };
       } catch (err) {
-        return fromException(err, 'Import non riuscito');
+        return fromException(err, 'Import failed');
       }
     },
   );
@@ -78,10 +78,10 @@ export function registerContactTools(server: MCPServer): void {
   server.tool(
     {
       name: 'list_contacts',
-      title: 'Elenca i contatti',
-      description: 'Elenca i contatti in database, con ricerca opzionale per nome, azienda o URL.',
+      title: 'List contacts',
+      description: 'Lists the contacts in the database, with an optional search by name, company or URL.',
       inputSchema: z.object({
-        search: z.string().optional().describe('Filtro su nome, azienda o URL profilo'),
+        search: z.string().optional().describe('Filter on name, company or profile URL'),
         limit: z.number().int().min(1).max(200).optional().describe('Default 25'),
         offset: z.number().int().min(0).optional(),
       }),
@@ -99,7 +99,7 @@ export function registerContactTools(server: MCPServer): void {
         ...(offset !== undefined ? { offset } : {}),
       });
       return {
-        content: [textBlock(`${r.returned} contatti mostrati su ${r.total} totali.`)],
+        content: [textBlock(`Showing ${r.returned} contacts out of ${r.total} total.`)],
         structuredContent: r,
       };
     },
@@ -108,15 +108,15 @@ export function registerContactTools(server: MCPServer): void {
   server.tool(
     {
       name: 'delete_contacts',
-      title: 'Cancella contatti',
+      title: 'Delete contacts',
       description:
-        'Cancella contatti dal database. Utile per annullare un import sbagliato: passa l\'import_id. Di default protegge i contatti già iscritti a una campagna; per rimuoverli comunque passa only_unenrolled=false — questo cancella anche le loro iscrizioni.',
+        'Deletes contacts from the database. Handy for undoing a bad import: pass the import_id. By default it protects contacts already enrolled in a campaign; to remove them anyway pass only_unenrolled=false — that also deletes their enrolments.',
       inputSchema: z.object({
         ...contactSelectionSchema,
         only_unenrolled: z
           .boolean()
           .optional()
-          .describe('Default true: salta i contatti già iscritti a una campagna'),
+          .describe('Default true: skips contacts already enrolled in a campaign'),
       }),
       outputSchema: z.object({ requested: z.number(), deleted: z.number(), skipped: z.number() }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
@@ -133,13 +133,13 @@ export function registerContactTools(server: MCPServer): void {
         return {
           content: [
             textBlock(
-              `Cancellati ${deleted} contatti su ${ids.length}${data.skipped > 0 ? ` (${data.skipped} saltati perché già iscritti a una campagna)` : ''}.`,
+              `Deleted ${deleted} contacts out of ${ids.length}${data.skipped > 0 ? ` (${data.skipped} skipped because already enrolled in a campaign)` : ''}.`,
             ),
           ],
           structuredContent: data,
         };
       } catch (err) {
-        return fromException(err, 'Cancellazione non riuscita');
+        return fromException(err, 'Deletion failed');
       }
     },
   );

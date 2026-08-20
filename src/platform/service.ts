@@ -1,11 +1,11 @@
 // ============================================================
-//  Installazione del daemon come servizio dell'utente.
+//  Installs the daemon as a user-level service.
 //
 //  macOS: LaunchAgent (~/Library/LaunchAgents)
 //  Linux: systemd user unit (~/.config/systemd/user)
 //
-//  Serve perché le campagne durano giorni: senza servizio, il motore
-//  vive solo finché l'utente tiene aperto un terminale.
+//  Needed because campaigns run for days: without a service, the engine
+//  only lives for as long as the user keeps a terminal open.
 // ============================================================
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
@@ -17,11 +17,11 @@ export const SERVICE_LABEL = 'com.linkedin-sequencer-mcp';
 const SYSTEMD_UNIT = 'linkedin-sequencer-mcp.service';
 
 export interface ServiceTarget {
-  /** Eseguibile node da usare (quello con cui gira adesso il CLI). */
+  /** Node executable to use (the one the CLI is currently running under). */
   nodePath: string;
-  /** Percorso dello script CLI (dist/cli.js). */
+  /** Path to the CLI script (dist/cli.js). */
   cliPath: string;
-  /** Avvia anche il motore all'accensione del servizio. */
+  /** Also start the engine when the service comes up. */
   autostartEngine: boolean;
 }
 
@@ -44,8 +44,8 @@ function plist(t: ServiceTarget): string {
     LKSQ_DATA_DIR: appConfig.dataDir,
     LKSQ_PORT: String(appConfig.port),
     AUTOSTART_ENGINE: String(t.autostartEngine),
-    // launchd parte con un PATH minimo: senza questo, `caffeinate` e i browser
-    // di sistema non si trovano.
+    // launchd starts with a bare-bones PATH: without this, `caffeinate` and the
+    // system browsers cannot be found.
     PATH: `${dirname(t.nodePath)}:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
   };
   const envXml = Object.entries(env)
@@ -120,23 +120,23 @@ export function installService(t: ServiceTarget): string[] {
 
   if (process.platform === 'darwin') {
     writeFileSync(target, plist(t));
-    steps.push(`LaunchAgent scritto in ${target}`);
+    steps.push(`LaunchAgent written to ${target}`);
     const uid = process.getuid?.() ?? 501;
-    run('/bin/launchctl', ['bootout', `gui/${uid}/${SERVICE_LABEL}`]); // ignora se non caricato
+    run('/bin/launchctl', ['bootout', `gui/${uid}/${SERVICE_LABEL}`]); // ignore if not loaded
     const boot = run('/bin/launchctl', ['bootstrap', `gui/${uid}`, target]);
-    if (boot.ok) steps.push('Servizio caricato (launchctl bootstrap)');
+    if (boot.ok) steps.push('Service loaded (launchctl bootstrap)');
     else {
       const legacy = run('/bin/launchctl', ['load', '-w', target]);
-      steps.push(legacy.ok ? 'Servizio caricato (launchctl load)' : `Caricamento fallito: ${boot.output}`);
+      steps.push(legacy.ok ? 'Service loaded (launchctl load)' : `Load failed: ${boot.output}`);
     }
   } else if (process.platform === 'linux') {
     writeFileSync(target, systemdUnit(t));
-    steps.push(`Unit systemd scritta in ${target}`);
+    steps.push(`systemd unit written to ${target}`);
     run('systemctl', ['--user', 'daemon-reload']);
     const en = run('systemctl', ['--user', 'enable', '--now', SYSTEMD_UNIT]);
-    steps.push(en.ok ? 'Servizio abilitato e avviato' : `Abilitazione fallita: ${en.output}`);
+    steps.push(en.ok ? 'Service enabled and started' : `Enable failed: ${en.output}`);
   } else {
-    throw new Error(`piattaforma non supportata per l'installazione del servizio: ${process.platform}`);
+    throw new Error(`unsupported platform for service installation: ${process.platform}`);
   }
 
   return steps;
@@ -150,18 +150,18 @@ export function uninstallService(): string[] {
     const uid = process.getuid?.() ?? 501;
     run('/bin/launchctl', ['bootout', `gui/${uid}/${SERVICE_LABEL}`]);
     run('/bin/launchctl', ['unload', '-w', target]);
-    steps.push('Servizio scaricato');
+    steps.push('Service unloaded');
   } else if (process.platform === 'linux') {
     run('systemctl', ['--user', 'disable', '--now', SYSTEMD_UNIT]);
     run('systemctl', ['--user', 'daemon-reload']);
-    steps.push('Servizio disabilitato');
+    steps.push('Service disabled');
   }
 
   if (existsSync(target)) {
     rmSync(target, { force: true });
-    steps.push(`Rimosso ${target}`);
+    steps.push(`Removed ${target}`);
   } else {
-    steps.push('Nessun file di servizio da rimuovere');
+    steps.push('No service file to remove');
   }
   return steps;
 }

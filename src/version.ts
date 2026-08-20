@@ -1,6 +1,6 @@
 // ============================================================
-//  Versione del pacchetto, letta dal package.json risalendo dalla
-//  posizione del modulo (funziona sia da `src/` con tsx sia da `dist/`).
+//  Package version, read from package.json by walking up from the
+//  module's own location (works both from `src/` via tsx and `dist/`).
 // ============================================================
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -18,7 +18,7 @@ function readVersion(): string {
       };
       if (pkg.name === PACKAGE_NAME && pkg.version) return pkg.version;
     } catch {
-      // package.json assente a questo livello: sali di uno
+      // no package.json at this level: go up one
     }
     const parent = dirname(dir);
     if (parent === dir) break;

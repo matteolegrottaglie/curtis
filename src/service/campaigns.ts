@@ -1,5 +1,5 @@
 // ============================================================
-//  Campagne (sequenze): CRUD, iscrizione contatti, sequenza consigliata.
+//  Campaigns (sequences): CRUD, contact enrollment, recommended sequence.
 // ============================================================
 import * as repo from '../db/repo.js';
 import type { Campaign, CampaignOverrides, CampaignStatus, Step } from '../types.js';
@@ -29,14 +29,14 @@ function view(c: Campaign): CampaignView {
 }
 
 /**
- * La sequenza consigliata per un account FREE, quella documentata nel README:
+ * The recommended sequence for a FREE account, the one documented in the README:
  *
- *   visita profilo → attesa 1 giorno → collegati SENZA nota
- *   → attendi accettazione → primo messaggio personalizzato
+ *   visit profile → wait 1 day → connect WITHOUT a note
+ *   → wait for acceptance → first personalized message
  *
- * La nota personalizzata NON va nell'invito: gli account free possono allegarla
- * solo a 5 inviti al mese. La personalizzazione vive nel primo messaggio dopo
- * l'accettazione, dove non costa nulla.
+ * The personalized note does NOT go in the invite: free accounts can attach one
+ * to just 5 invites a month. Personalization lives in the first message after
+ * acceptance, where it costs nothing.
  */
 export function recommendedSteps(opts: { firstMessage?: string; waitAcceptDays?: number } = {}): Step[] {
   const steps: Step[] = [
@@ -61,7 +61,7 @@ export function listCampaigns(): CampaignView[] {
 
 export function getCampaign(id: string): CampaignView {
   const c = repo.getCampaign(id);
-  if (!c) throw new Error(`campagna "${id}" non trovata`);
+  if (!c) throw new Error(`campaign "${id}" not found`);
   return view(c);
 }
 
@@ -74,18 +74,18 @@ export function updateCampaign(
 }
 
 export function setCampaignStatus(id: string, status: CampaignStatus): CampaignView {
-  if (!repo.getCampaign(id)) throw new Error(`campagna "${id}" non trovata`);
+  if (!repo.getCampaign(id)) throw new Error(`campaign "${id}" not found`);
   repo.setCampaignStatus(id, status);
   return getCampaign(id);
 }
 
 export function deleteCampaign(id: string): void {
-  if (!repo.getCampaign(id)) throw new Error(`campagna "${id}" non trovata`);
+  if (!repo.getCampaign(id)) throw new Error(`campaign "${id}" not found`);
   repo.deleteCampaign(id);
 }
 
 export function enrollContacts(campaignId: string, contactIds: string[]): { enrolled: number; requested: number } {
-  if (!repo.getCampaign(campaignId)) throw new Error(`campagna "${campaignId}" non trovata`);
+  if (!repo.getCampaign(campaignId)) throw new Error(`campaign "${campaignId}" not found`);
   const enrolled = repo.enrollContacts(campaignId, contactIds);
   return { enrolled, requested: contactIds.length };
 }

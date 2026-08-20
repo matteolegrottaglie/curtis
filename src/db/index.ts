@@ -1,5 +1,5 @@
 // ============================================================
-//  Connessione SQLite (better-sqlite3) + init schema + seed.
+//  SQLite connection (better-sqlite3) + schema init + seed.
 // ============================================================
 import Database from 'better-sqlite3';
 import { paths, ensureDataDir, DEFAULT_SAFETY_CONFIG, DEFAULT_CONTROLLER_STATE } from '../config.js';
@@ -17,11 +17,11 @@ export function getDb(): Database.Database {
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
   _db = db;
-  log.info({ dbPath }, 'database pronto');
+  log.info({ dbPath }, 'database ready');
   return db;
 }
 
-/** Inserisce i default di sicurezza e lo stato controller se mancanti. */
+/** Inserts the safety defaults and the controller state if they are missing. */
 export function initDb(): void {
   const db = getDb();
   const hasSettings = db.prepare('SELECT 1 FROM settings WHERE id = 1').get();
@@ -29,7 +29,7 @@ export function initDb(): void {
     db.prepare('INSERT INTO settings (id, json) VALUES (1, ?)').run(
       JSON.stringify(DEFAULT_SAFETY_CONFIG),
     );
-    log.info('config di sicurezza inizializzata con i default');
+    log.info('safety config initialized with the defaults');
   }
   const hasCtrl = db.prepare('SELECT 1 FROM controller_state WHERE id = 1').get();
   if (!hasCtrl) {

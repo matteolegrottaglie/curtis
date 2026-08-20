@@ -1,5 +1,5 @@
 // ============================================================
-//  Tool di lettura: metriche, log delle azioni, segnali di salute.
+//  Read-only tools: metrics, action log, health signals.
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -11,9 +11,9 @@ export function registerInsightTools(server: MCPServer): void {
   server.tool(
     {
       name: 'get_metrics',
-      title: 'Metriche di outreach',
+      title: 'Outreach metrics',
       description:
-        'Andamento degli invii e delle accettazioni per giorno (14 giorni), acceptance rate a finestra mobile 7 giorni (30 giorni), funnel visite → inviti → accettati → messaggi (30 giorni), stato delle campagne e segnali di salute dell\'account (7 giorni). L\'acceptance rate è il numero che conta: se scende, il problema è il targeting o il messaggio, non i limiti.',
+        'Invitations sent and accepted per day (14 days), acceptance rate over a 7-day rolling window (30 days), funnel visits → invitations → accepted → messages (30 days), campaign states and account health signals (7 days). The acceptance rate is the number that matters: if it drops, the problem is the targeting or the message, not the limits.',
       inputSchema: z.object({}),
       outputSchema: z.object({
         daily_invites: z.array(z.object({ date: z.string(), sent: z.number(), accepted: z.number() })),
@@ -49,11 +49,11 @@ export function registerInsightTools(server: MCPServer): void {
       const f = m.funnel_30d;
       const lastRate = [...m.daily_acceptance].reverse().find((d) => d.rate !== null)?.rate ?? null;
       const text = [
-        `Ultimi 30 giorni: ${f.visits} visite, ${f.invites_sent} inviti, ${f.accepted} accettati, ${f.messages} messaggi.`,
-        lastRate === null ? 'Acceptance rate non ancora misurabile.' : `Acceptance rate (7gg mobile): ${Math.round(lastRate * 100)}%.`,
+        `Last 30 days: ${f.visits} visits, ${f.invites_sent} invitations, ${f.accepted} accepted, ${f.messages} messages.`,
+        lastRate === null ? 'Acceptance rate not measurable yet.' : `Acceptance rate (7-day rolling): ${Math.round(lastRate * 100)}%.`,
         m.signals_7d.total > 0
-          ? `⚠ ${m.signals_7d.total} segnali negli ultimi 7 giorni (captcha ${m.signals_7d.captcha}, limiti ${m.signals_7d.weekly_limit}, restrizioni ${m.signals_7d.restriction}).`
-          : 'Nessun segnale negativo negli ultimi 7 giorni.',
+          ? `⚠ ${m.signals_7d.total} signals in the last 7 days (captcha ${m.signals_7d.captcha}, limits ${m.signals_7d.weekly_limit}, restrictions ${m.signals_7d.restriction}).`
+          : 'No negative signals in the last 7 days.',
       ].join(' ');
       return { content: [textBlock(text)], structuredContent: m };
     },
@@ -62,9 +62,9 @@ export function registerInsightTools(server: MCPServer): void {
   server.tool(
     {
       name: 'get_recent_actions',
-      title: 'Ultime azioni eseguite',
+      title: 'Most recent actions',
       description:
-        'Log delle ultime azioni del motore, con esito e dettaglio. Quando un\'azione fallisce per un selettore che LinkedIn ha cambiato, il campo screenshot contiene il percorso di uno screenshot da guardare.',
+        'Log of the engine\'s most recent actions, with outcome and detail. When an action fails on a selector LinkedIn has changed, the screenshot field holds the path to a screenshot worth looking at.',
       inputSchema: z.object({
         limit: z.number().int().min(1).max(200).optional().describe('Default 20'),
       }),
@@ -100,7 +100,7 @@ export function registerInsightTools(server: MCPServer): void {
                 `${new Date(a.created_at).toLocaleString('it-IT')} · ${a.type} · ${a.status}${a.contact_name ? ` · ${a.contact_name}` : ''}${a.detail ? ` — ${a.detail}` : ''}`,
             )
             .join('\n')
-        : 'Nessuna azione registrata.';
+        : 'No actions recorded.';
       return { content: [textBlock(text)], structuredContent: { actions: rows } };
     },
   );
@@ -108,11 +108,11 @@ export function registerInsightTools(server: MCPServer): void {
   server.tool(
     {
       name: 'get_signals',
-      title: 'Segnali di salute dell\'account',
+      title: 'Account health signals',
       description:
-        'Segnali rilevati su LinkedIn: limite settimanale, captcha o verifica di sicurezza, restrizione dell\'account, avvisi di attività insolita. Sono la ragione per cui il motore rallenta o si ferma.',
+        'Signals picked up on LinkedIn: weekly limit reached, captcha or security check, account restriction, unusual-activity warnings. They are the reason the engine slows down or stops.',
       inputSchema: z.object({
-        days: z.number().int().min(1).max(90).optional().describe('Finestra in giorni, default 7'),
+        days: z.number().int().min(1).max(90).optional().describe('Window in days, default 7'),
       }),
       outputSchema: z.object({
         signals: z.array(
@@ -136,9 +136,9 @@ export function registerInsightTools(server: MCPServer): void {
       }));
       const text = rows.length
         ? rows
-            .map((s) => `${new Date(s.created_at).toLocaleString('it-IT')} · ${s.kind} (gravità ${s.severity})${s.detail ? ` — ${s.detail}` : ''}`)
+            .map((s) => `${new Date(s.created_at).toLocaleString('it-IT')} · ${s.kind} (severity ${s.severity})${s.detail ? ` — ${s.detail}` : ''}`)
             .join('\n')
-        : `Nessun segnale negli ultimi ${days ?? 7} giorni: l'account è tranquillo.`;
+        : `No signals in the last ${days ?? 7} days: the account is quiet.`;
       return { content: [textBlock(text)], structuredContent: { signals: rows } };
     },
   );

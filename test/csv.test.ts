@@ -1,43 +1,43 @@
-// Import CSV: normalizzazione URL profilo e mappatura delle intestazioni.
+// CSV import: profile URL normalization and header mapping.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeProfileUrl, parseCsvBuffer } from '../src/importer/csv.js';
 
-test('accetta un URL completo e ne estrae il public id', () => {
+test('accepts a full URL and extracts the public id from it', () => {
   const r = normalizeProfileUrl('https://www.linkedin.com/in/mario-rossi/');
   assert.deepEqual(r, { url: 'https://www.linkedin.com/in/mario-rossi/', publicId: 'mario-rossi', inferred: false });
 });
 
-test('rimuove query string e fragment (parametri di tracciamento)', () => {
+test('strips query string and fragment (tracking parameters)', () => {
   const r = normalizeProfileUrl('https://www.linkedin.com/in/mario-rossi/?utm_source=x&trk=y#top');
   assert.equal(r?.url, 'https://www.linkedin.com/in/mario-rossi/');
 });
 
-test('accetta un URL senza schema', () => {
+test('accepts a URL without a scheme', () => {
   const r = normalizeProfileUrl('linkedin.com/in/giulia-bianchi');
   assert.equal(r?.url, 'https://www.linkedin.com/in/giulia-bianchi/');
   assert.equal(r?.inferred, false);
 });
 
-test('accetta la forma "in/slug" senza marcarla come inferita', () => {
+test('accepts the "in/slug" form without flagging it as inferred', () => {
   const r = normalizeProfileUrl('in/luca-verdi');
   assert.equal(r?.url, 'https://www.linkedin.com/in/luca-verdi/');
   assert.equal(r?.inferred, false);
 });
 
-test('uno slug nudo viene ricostruito ma marcato come inferito', () => {
+test('a bare slug is rebuilt into a URL but flagged as inferred', () => {
   const r = normalizeProfileUrl('mario-rossi');
   assert.equal(r?.url, 'https://www.linkedin.com/in/mario-rossi/');
-  assert.equal(r?.inferred, true, 'chi importa deve poter distinguere un URL vero da uno ricostruito');
+  assert.equal(r?.inferred, true, 'whoever imports must be able to tell a real URL from a rebuilt one');
 });
 
-test('rifiuta domini non LinkedIn e stringhe vuote', () => {
+test('rejects non-LinkedIn domains and empty strings', () => {
   assert.equal(normalizeProfileUrl('https://twitter.com/mario'), null);
   assert.equal(normalizeProfileUrl(''), null);
   assert.equal(normalizeProfileUrl('   '), null);
 });
 
-test('riconosce le intestazioni italiane e mette le colonne extra in custom', () => {
+test('recognizes Italian headers and puts the extra columns into custom', () => {
   const csv = [
     'Profilo,Nome,Cognome,Azienda,Qualifica,Città,Settore',
     'https://www.linkedin.com/in/mario-rossi/,Mario,Rossi,Acme,CEO,Milano,Manifattura',
@@ -53,14 +53,14 @@ test('riconosce le intestazioni italiane e mette le colonne extra in custom', ()
   assert.deepEqual(c.custom, { Settore: 'Manifattura' });
 });
 
-test('riconosce le intestazioni inglesi', () => {
+test('recognizes English headers', () => {
   const csv = 'profile_url,first_name,last_name,company\nhttps://www.linkedin.com/in/j-doe/,John,Doe,Globex';
   const c = parseCsvBuffer(csv, 't.csv').valid[0]!;
   assert.equal(c.first_name, 'John');
   assert.equal(c.company, 'Globex');
 });
 
-test('le righe senza URL valido finiscono in invalid con il numero di riga del file', () => {
+test('rows without a valid URL land in invalid with their line number in the file', () => {
   const csv = 'profile_url,nome\nhttps://www.linkedin.com/in/ok/,Ok\n,Vuoto\nhttps://example.com/x,Fuori';
   const r = parseCsvBuffer(csv, 't.csv');
   assert.equal(r.valid.length, 1);
@@ -70,7 +70,7 @@ test('le righe senza URL valido finiscono in invalid con il numero di riga del f
   );
 });
 
-test('conta le righe con URL ricostruito da slug', () => {
+test('counts the rows whose URL was rebuilt from a slug', () => {
   const csv = 'profile_url,nome\nmario-rossi,Mario\nhttps://www.linkedin.com/in/vero/,Vero';
   const r = parseCsvBuffer(csv, 't.csv');
   assert.equal(r.inferred.length, 1);

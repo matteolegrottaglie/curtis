@@ -1,9 +1,9 @@
 // ============================================================
-//  Metriche per la lettura da chat: andamento invii, acceptance rate,
-//  funnel, stato campagne, segnali di salute dell'account.
+//  Metrics meant to be read from chat: invite trend, acceptance rate,
+//  funnel, campaign status, account health signals.
 //
-//  Logica spostata tale e quale dall'endpoint /api/metrics della
-//  vecchia dashboard.
+//  Logic lifted verbatim from the /api/metrics endpoint of the old
+//  dashboard.
 // ============================================================
 import { DateTime } from 'luxon';
 import * as repo from '../db/repo.js';
@@ -30,7 +30,7 @@ export interface Metrics {
 export function getMetrics(at: number = Date.now()): Metrics {
   const tz = repo.getSafetyConfig().timezone;
 
-  // Giorni "scaffold" nel fuso configurato, dal più vecchio al più recente.
+  // "Scaffold" days in the configured timezone, oldest to newest.
   const dayKeys = (n: number): string[] => {
     const today = DateTime.fromMillis(at).setZone(tz).startOf('day');
     const out: string[] = [];
@@ -39,7 +39,7 @@ export function getMetrics(at: number = Date.now()): Metrics {
   };
   const dayKeyOf = (ms: number) => DateTime.fromMillis(ms).setZone(tz).toISODate()!;
 
-  // -- invii (e accettazioni) per giorno · ultimi 14 giorni
+  // -- invites (and acceptances) per day · last 14 days
   const days14 = dayKeys(14);
   const since14 = at - 14 * DAY_MS;
   const sentByDay = new Map(days14.map((d) => [d, 0]));
@@ -54,7 +54,7 @@ export function getMetrics(at: number = Date.now()): Metrics {
   }
   const daily_invites = days14.map((d) => ({ date: d, sent: sentByDay.get(d)!, accepted: accByDay.get(d)! }));
 
-  // -- acceptance rate · finestra mobile 7 giorni sugli ultimi 30
+  // -- acceptance rate · 7-day rolling window over the last 30
   const since37 = at - 37 * DAY_MS;
   const sent37 = repo.actionTimestamps('connect', 'success', since37);
   const acc37 = repo.actionTimestamps('check_accepted', 'success', since37);
@@ -66,7 +66,7 @@ export function getMetrics(at: number = Date.now()): Metrics {
     return { date: d, rate: s > 0 ? a / s : null };
   });
 
-  // -- funnel · ultimi 30 giorni
+  // -- funnel · last 30 days
   const since30 = at - 30 * DAY_MS;
   const funnel_30d = {
     visits: repo.countActions({ type: 'visit', status: 'success', since: since30 }),
@@ -75,14 +75,14 @@ export function getMetrics(at: number = Date.now()): Metrics {
     messages: repo.countActions({ type: 'message', status: 'success', since: since30 }),
   };
 
-  // -- stato campagne
+  // -- campaign status
   const campaigns = { total: 0, draft: 0, running: 0, paused: 0, archived: 0 };
   for (const c of repo.listCampaigns()) {
     campaigns.total++;
     if (c.status in campaigns) (campaigns as Record<string, number>)[c.status]!++;
   }
 
-  // -- segnali · ultimi 7 giorni
+  // -- signals · last 7 days
   const rows = repo.recentSignals(at - 7 * DAY_MS);
   const signals_7d = {
     total: rows.length,

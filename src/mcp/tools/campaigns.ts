@@ -1,5 +1,5 @@
 // ============================================================
-//  Tool sulle campagne (sequenze) e sull'iscrizione dei contatti.
+//  Campaign (sequence) tools and contact enrolment.
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -23,8 +23,8 @@ const campaignSchema = z.object({
 type CampaignWire = z.infer<typeof campaignSchema>;
 
 /**
- * `CampaignView` usa tipi stretti (Step[], CampaignOverrides); l'outputSchema
- * dichiara JSON generico. Questo mapper fa il ponte in un punto solo.
+ * `CampaignView` uses narrow types (Step[], CampaignOverrides); the outputSchema
+ * declares generic JSON. This mapper bridges the two in a single place.
  */
 function toWire(c: CampaignView): CampaignWire {
   return {
@@ -43,25 +43,25 @@ function describe(c: CampaignView): string {
   const counts = Object.entries(c.counts)
     .map(([k, v]) => `${k}: ${v}`)
     .join(', ');
-  return `Campagna "${c.name}" (${c.id}) — stato ${c.status}, ${c.steps.length} step${counts ? `. Iscritti → ${counts}` : '. Nessun contatto iscritto.'}`;
+  return `Campaign "${c.name}" (${c.id}) — status ${c.status}, ${c.steps.length} steps${counts ? `. Enrolled → ${counts}` : '. No contacts enrolled.'}`;
 }
 
 export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'create_campaign',
-      title: 'Crea una campagna',
+      title: 'Create a campaign',
       description:
-        'Crea una sequenza di azioni. Se non passi `steps`, usa la sequenza consigliata per gli account FREE: visita profilo → attesa 1 giorno → collegamento SENZA nota → attesa accettazione 14 giorni → (opzionale) primo messaggio. La campagna nasce in stato "draft": va messa in "running" con set_campaign_status perché l\'engine la esegua.',
+        'Creates a sequence of actions. If you omit `steps`, it uses the sequence recommended for FREE accounts: profile visit → wait 1 day → connection request WITHOUT a note → wait 14 days for acceptance → (optional) first message. The campaign starts out as "draft": it has to be switched to "running" with set_campaign_status before the engine will execute it.',
       inputSchema: z.object({
-        name: z.string().min(1).max(120).describe('Nome della campagna'),
-        steps: stepsSchema.optional().describe('Sequenza personalizzata. Omettila per usare quella consigliata.'),
+        name: z.string().min(1).max(120).describe('Campaign name'),
+        steps: stepsSchema.optional().describe('Custom sequence. Omit it to use the recommended one.'),
         first_message: z
           .string()
           .max(1900)
           .optional()
           .describe(
-            'Solo con la sequenza consigliata: testo del primo messaggio dopo l\'accettazione. È qui che va la personalizzazione, non nella nota dell\'invito.',
+            'Recommended sequence only: text of the first message after acceptance. This is where the personalisation belongs, not in the invitation note.',
           ),
         wait_accept_days: z
           .number()
@@ -69,10 +69,10 @@ export function registerCampaignTools(server: MCPServer): void {
           .min(1)
           .max(60)
           .optional()
-          .describe('Solo con la sequenza consigliata: giorni di attesa dell\'accettazione (default 14)'),
+          .describe('Recommended sequence only: days to wait for acceptance (default 14)'),
         settings: campaignSettingsSchema
           .optional()
-          .describe('Override per questa campagna: tetti, ritardi, finestra oraria, nota sull\'invito'),
+          .describe('Overrides for this campaign: ceilings, delays, working window, invitation note'),
       }),
       outputSchema: campaignSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -88,7 +88,7 @@ export function registerCampaignTools(server: MCPServer): void {
         const c = campaigns.createCampaign(name, finalSteps, settings);
         return { content: [textBlock(describe(c))], structuredContent: toWire(c) };
       } catch (err) {
-        return fromException(err, 'Creazione campagna non riuscita');
+        return fromException(err, 'Campaign creation failed');
       }
     },
   );
@@ -96,15 +96,15 @@ export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'list_campaigns',
-      title: 'Elenca le campagne',
-      description: 'Elenca tutte le campagne con stato, step e conteggio degli iscritti per stato.',
+      title: 'List campaigns',
+      description: 'Lists every campaign with its status, steps and enrolment counts broken down by state.',
       inputSchema: z.object({}),
       outputSchema: z.object({ campaigns: z.array(campaignSchema) }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async () => {
       const list = campaigns.listCampaigns();
-      const text = list.length ? list.map(describe).join('\n') : 'Nessuna campagna creata.';
+      const text = list.length ? list.map(describe).join('\n') : 'No campaigns created yet.';
       return { content: [textBlock(text)], structuredContent: { campaigns: list.map(toWire) } };
     },
   );
@@ -112,8 +112,8 @@ export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'get_campaign',
-      title: 'Dettaglio di una campagna',
-      description: 'Restituisce una campagna con i suoi step e lo stato degli iscritti.',
+      title: 'Campaign detail',
+      description: 'Returns one campaign with its steps and the state of its enrolled contacts.',
       inputSchema: z.object({ campaign_id: z.string() }),
       outputSchema: campaignSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -123,7 +123,7 @@ export function registerCampaignTools(server: MCPServer): void {
         const c = campaigns.getCampaign(campaign_id);
         return { content: [textBlock(describe(c))], structuredContent: toWire(c) };
       } catch (err) {
-        return fromException(err, 'Campagna non trovata');
+        return fromException(err, 'Campaign not found');
       }
     },
   );
@@ -131,14 +131,14 @@ export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'update_campaign',
-      title: 'Modifica una campagna',
+      title: 'Edit a campaign',
       description:
-        'Cambia nome, step o override di una campagna. Attenzione: cambiare gli step di una campagna già avviata sposta gli iscritti su indici di step diversi.',
+        'Changes the name, steps or overrides of a campaign. Careful: changing the steps of a campaign already under way shifts enrolled contacts onto different step indexes.',
       inputSchema: z.object({
         campaign_id: z.string(),
         name: z.string().min(1).max(120).optional(),
         steps: stepsSchema.optional(),
-        settings: campaignSettingsSchema.nullable().optional().describe('null azzera gli override'),
+        settings: campaignSettingsSchema.nullable().optional().describe('null clears the overrides'),
       }),
       outputSchema: campaignSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -152,7 +152,7 @@ export function registerCampaignTools(server: MCPServer): void {
         });
         return { content: [textBlock(describe(c))], structuredContent: toWire(c) };
       } catch (err) {
-        return fromException(err, 'Modifica non riuscita');
+        return fromException(err, 'Update failed');
       }
     },
   );
@@ -160,9 +160,9 @@ export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'set_campaign_status',
-      title: 'Cambia stato di una campagna',
+      title: 'Change a campaign status',
       description:
-        'Imposta lo stato: "running" la rende eseguibile dall\'engine, "paused" la sospende (gli iscritti restano dove sono), "draft" la riporta in bozza, "archived" la mette da parte. Nota: mettere una campagna in running NON avvia l\'engine — serve anche engine_control action="start".',
+        'Sets the status: "running" makes it executable by the engine, "paused" suspends it (enrolled contacts stay where they are), "draft" sends it back to draft, "archived" puts it aside. Note: setting a campaign to running does NOT start the engine — you also need engine_control action="start".',
       inputSchema: z.object({
         campaign_id: z.string(),
         status: z.enum(['draft', 'running', 'paused', 'archived']),
@@ -175,7 +175,7 @@ export function registerCampaignTools(server: MCPServer): void {
         const c = campaigns.setCampaignStatus(campaign_id, status);
         return { content: [textBlock(describe(c))], structuredContent: toWire(c) };
       } catch (err) {
-        return fromException(err, 'Cambio stato non riuscito');
+        return fromException(err, 'Status change failed');
       }
     },
   );
@@ -183,9 +183,9 @@ export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'delete_campaign',
-      title: 'Elimina una campagna',
+      title: 'Delete a campaign',
       description:
-        'Elimina definitivamente una campagna e le iscrizioni dei suoi contatti. I contatti restano in database, e lo storico delle azioni già eseguite resta nei log.',
+        'Permanently deletes a campaign and the enrolments of its contacts. The contacts stay in the database, and the history of actions already performed stays in the logs.',
       inputSchema: z.object({ campaign_id: z.string() }),
       outputSchema: z.object({ deleted: z.boolean(), campaign_id: z.string() }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
@@ -194,11 +194,11 @@ export function registerCampaignTools(server: MCPServer): void {
       try {
         campaigns.deleteCampaign(campaign_id);
         return {
-          content: [textBlock(`Campagna ${campaign_id} eliminata.`)],
+          content: [textBlock(`Campaign ${campaign_id} deleted.`)],
           structuredContent: { deleted: true, campaign_id },
         };
       } catch (err) {
-        return fromException(err, 'Eliminazione non riuscita');
+        return fromException(err, 'Deletion failed');
       }
     },
   );
@@ -206,9 +206,9 @@ export function registerCampaignTools(server: MCPServer): void {
   server.tool(
     {
       name: 'enroll_contacts',
-      title: 'Iscrivi contatti a una campagna',
+      title: 'Enroll contacts in a campaign',
       description:
-        'Iscrive contatti a una campagna: partiranno dal primo step. Indica quali contatti con import_id (quelli di un import appena fatto), contact_ids, oppure all=true. I contatti già iscritti a quella campagna vengono ignorati.',
+        'Enrolls contacts in a campaign: they start from the first step. Pick which contacts with import_id (the ones from an import you just ran), contact_ids, or all=true. Contacts already enrolled in that campaign are ignored.',
       inputSchema: z.object({ campaign_id: z.string(), ...contactSelectionSchema }),
       outputSchema: z.object({ campaign_id: z.string(), requested: z.number(), enrolled: z.number() }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -224,13 +224,13 @@ export function registerCampaignTools(server: MCPServer): void {
         return {
           content: [
             textBlock(
-              `Iscritti ${r.enrolled} contatti su ${r.requested} richiesti${r.enrolled < r.requested ? ' (gli altri erano già iscritti a questa campagna)' : ''}.`,
+              `Enrolled ${r.enrolled} contacts out of the ${r.requested} requested${r.enrolled < r.requested ? ' (the rest were already enrolled in this campaign)' : ''}.`,
             ),
           ],
           structuredContent: { campaign_id, ...r },
         };
       } catch (err) {
-        return fromException(err, 'Iscrizione non riuscita');
+        return fromException(err, 'Enrolment failed');
       }
     },
   );

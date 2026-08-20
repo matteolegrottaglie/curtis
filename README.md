@@ -239,7 +239,7 @@ This is the sequence `create_campaign` and `start_connection_campaign` use by de
 ## The safety controller
 
 The closed-loop controller in [`src/safety/controller.ts`](src/safety/controller.ts) is the
-anti-ban core. It is not a static schedule:
+safety core. It is not a static schedule:
 
 | Mechanism | Default behaviour |
 |---|---|
@@ -343,7 +343,7 @@ src/
   config.ts            paths, port, token, safety defaults
   mcp/                 MCP server: instructions, zod schemas, tools
   service/             application logic shared by the tools
-  safety/controller.ts adaptive controller (anti-ban core)
+  safety/controller.ts adaptive rate controller (safety core)
   sequencer/engine.ts  worker loop
   browser/             persistent session, stealth, human behaviour
   linkedin/            selectors (FRAGILE), guards, Playwright actions

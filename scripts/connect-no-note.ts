@@ -1,22 +1,22 @@
 // ============================================================
-//  Invio richieste di collegamento SENZA NOTA, fuori dall'engine.
+//  Sends connection requests WITHOUT A NOTE, outside the engine.
 //
-//  Ultimo passo del ciclo di riparazione dei selettori: dopo aver
-//  corretto `src/linkedin/selectors.ts` e visto verde su
-//  `npm run test:selectors`, serve un invio reale isolato per sapere
-//  se la UI vera si comporta come il DOM sintetico.
+//  Last step of the selector repair loop: after fixing
+//  `src/linkedin/selectors.ts` and getting green on
+//  `npm run test:selectors`, one isolated real send is needed to
+//  tell whether the real UI behaves like the synthetic DOM.
 //
-//  Perché i selettori sono fatti così (vale anche qui):
-//   - il "Connect" della top-card è un <a> con aria-label
-//     "Invite <Nome> to connect", NON un <button> e senza
-//     role="button": `getByRole('button', ...)` restituisce zero;
-//   - il nome NON è in un <h1>, quindi il target si ancora ai token
-//     del nome attesi (dal CSV) e non tocca mai il "Connect" della
-//     sidebar "More profiles for you".
+//  Why the selectors look the way they do (applies here too):
+//   - the top-card "Connect" is an <a> with aria-label
+//     "Invite <Name> to connect", NOT a <button> and with no
+//     role="button": `getByRole('button', ...)` returns zero;
+//   - the name is NOT in an <h1>, so the target anchors on the
+//     expected name tokens (from the CSV) and never touches the
+//     "Connect" in the "More profiles for you" sidebar.
 //
-//  Fa SOLO: visita profilo + richiesta di collegamento senza nota.
-//  NB: nessuna funzione con nome dentro page.evaluate (esbuild/tsx
-//  inietterebbe l'helper __name, inesistente nel contesto pagina).
+//  Does ONLY: profile visit + connection request without a note.
+//  NB: no named function inside page.evaluate (esbuild/tsx would
+//  inject the __name helper, which does not exist in page context).
 // ============================================================
 import { readFileSync } from 'node:fs';
 import type { Page } from 'playwright';
@@ -87,10 +87,10 @@ function byLabel(p: Page, label: string) {
 }
 
 /**
- * Click robusto: la top-nav sticky di LinkedIn ("Claim Premium Page")
- * intercetta i pointer event se l'elemento resta sotto l'header.
- * Quindi si centra l'elemento nel viewport prima di cliccare, con
- * fallback su force click.
+ * Robust click: LinkedIn's sticky top-nav ("Claim Premium Page")
+ * intercepts pointer events when the element sits under the header.
+ * So the element is centered in the viewport before clicking, with
+ * a force-click fallback.
  */
 async function safeClick(loc: ReturnType<Page['locator']>): Promise<void> {
   await loc.evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' })).catch(() => {});
@@ -100,12 +100,12 @@ async function safeClick(loc: ReturnType<Page['locator']>): Promise<void> {
   try {
     await loc.click({ timeout: 8_000 });
   } catch {
-    // MAI force:true — cliccherebbe alle COORDINATE e, se la top-nav
-    // sticky è sovrapposta, colpisce il banner "Claim Premium Page"
-    // portando alla pagina di checkout Premium (già successo).
-    // Qui il click viene dispatchato sull'ELEMENTO giusto.
-    // Il target può essere un <div> dentro un <a role="menuitem">:
-    // si clicca l'antenato interattivo, altrimenti l'elemento stesso.
+    // NEVER force:true — it would click at the COORDINATES and, if the
+    // sticky top-nav overlaps, it hits the "Claim Premium Page" banner
+    // and lands on the Premium checkout page (already happened).
+    // Here the click is dispatched on the RIGHT ELEMENT.
+    // The target may be a <div> inside an <a role="menuitem">:
+    // click the interactive ancestor, otherwise the element itself.
     await loc.evaluate((el) => {
       const t = (el as HTMLElement).closest('a,button,[role="menuitem"]') || el;
       (t as HTMLElement).click();
@@ -114,8 +114,8 @@ async function safeClick(loc: ReturnType<Page['locator']>): Promise<void> {
 }
 
 /**
- * Alcuni profili (es. 3° grado) NON espongono "Connect" nella top-card:
- * l'opzione esiste solo dentro il menu "More". Qui lo si apre.
+ * Some profiles (e.g. 3rd degree) do NOT expose "Connect" in the top-card:
+ * the option only lives inside the "More" menu. This opens it.
  */
 async function openMoreMenu(p: Page): Promise<boolean> {
   const more = p.locator('[aria-label="More"]').first();
@@ -141,7 +141,7 @@ async function processOne(session: LinkedInSession, c: Picked): Promise<{ status
   await H.humanScroll(p, randInt(1, 2));
   let st = await readTopCard(p, tokens);
 
-  // fallback: "Connect" può stare solo nel menu "More"
+  // fallback: "Connect" may live only in the "More" menu
   if (st.kind === 'none') {
     if (await openMoreMenu(p)) {
       const st2 = await readTopCard(p, tokens, 10_000);
@@ -149,12 +149,12 @@ async function processOne(session: LinkedInSession, c: Picked): Promise<{ status
     }
   }
 
-  if (st.kind === 'pending') return { status: 'skipped', detail: `invito GIÀ PENDENTE ("${st.label}") — nessuna azione` };
+  if (st.kind === 'pending') return { status: 'skipped', detail: `invite ALREADY PENDING ("${st.label}") — no action` };
   if (st.kind === 'none') {
     const shot = await session.screenshot('v4-no-connect');
     return {
       status: 'failed',
-      detail: `nessun "Invite ... to connect" per [${tokens.join(' ')}] né in top-card né nel menu More; aria-label viste: ${JSON.stringify(st.sample ?? [])} — ${shot ?? ''}`,
+      detail: `no "Invite ... to connect" for [${tokens.join(' ')}] in the top-card nor in the More menu; aria-labels seen: ${JSON.stringify(st.sample ?? [])} — ${shot ?? ''}`,
     };
   }
 
@@ -165,13 +165,13 @@ async function processOne(session: LinkedInSession, c: Picked): Promise<{ status
   const sig2 = await detectGuards(p);
   if (sig2) return { status: 'blocked', detail: `${sig2.kind}: ${sig2.detail ?? ''}` };
 
-  // SICUREZZA: se il click ha portato fuori dal profilo (es. upsell
-  // Premium / checkout), fermarsi subito e non toccare nulla.
+  // SAFETY: if the click navigated away from the profile (e.g. Premium
+  // upsell / checkout), stop right away and touch nothing.
   if (/\/premium\/|\/checkout|\/payment|upsell/i.test(p.url())) {
-    return { status: 'aborted', detail: `finito su pagina Premium/checkout (${p.url()}) — nessuna azione, mi fermo` };
+    return { status: 'aborted', detail: `ended up on a Premium/checkout page (${p.url()}) — no action, stopping` };
   }
 
-  // --- modale invito: SEMPRE "senza nota", mai una nota ---
+  // --- invite modal: ALWAYS "without a note", never a note ---
   const noNote = p.getByText(/^\s*(send without a note|invia senza nota)\s*$/i).first();
   const sendBtn = p.getByText(/^\s*(send|invia)\s*$/i).first();
   if (await noNote.isVisible({ timeout: 6000 }).catch(() => false)) {
@@ -184,14 +184,14 @@ async function processOne(session: LinkedInSession, c: Picked): Promise<{ status
   const sig3 = await detectGuards(p);
   if (sig3) return { status: 'blocked', detail: `${sig3.kind}: ${sig3.detail ?? ''}` };
 
-  // --- verifica reale: deve comparire "Pending" per questa persona ---
+  // --- real check: "Pending" must show up for this person ---
   const after = await readTopCard(p, tokens, 15_000);
-  if (after.kind === 'pending') return { status: 'success', detail: `invito inviato senza nota — CONFERMATO ("${after.label}")` };
+  if (after.kind === 'pending') return { status: 'success', detail: `invite sent without a note — CONFIRMED ("${after.label}")` };
 
   const shot = await session.screenshot('v4-unconfirmed');
   return {
     status: 'unconfirmed',
-    detail: `cliccato ma "Pending" non rilevato; aria-label viste: ${JSON.stringify(after.sample ?? [])} — ${shot ?? ''}`,
+    detail: `clicked but "Pending" not detected; aria-labels seen: ${JSON.stringify(after.sample ?? [])} — ${shot ?? ''}`,
   };
 }
 
@@ -203,11 +203,11 @@ async function main(): Promise<void> {
   const session = new LinkedInSession();
   await session.launch();
   if (!(await session.isLoggedIn())) {
-    console.error('✖ non loggato — nessuna azione');
+    console.error('✖ not logged in — no action');
     await session.close();
     process.exit(2);
   }
-  console.log('✓ sessione LinkedIn attiva\n');
+  console.log('✓ LinkedIn session active\n');
 
   const out: Array<{ name: string; status: string; detail: string }> = [];
   for (let i = 0; i < targets.length; i++) {
@@ -217,23 +217,23 @@ async function main(): Promise<void> {
     console.log(`      ${r.status} — ${r.detail}`);
     out.push({ name: c.full_name, ...r });
     if (r.status === 'blocked' || r.status === 'aborted') {
-      console.error('⛔ segnale LinkedIn — mi fermo, nessun altro invito.');
+      console.error('⛔ LinkedIn signal — stopping, no further invites.');
       break;
     }
     if (i < targets.length - 1) {
       const t = Date.now();
       await H.humanPause(DEFAULT_SAFETY_CONFIG);
-      console.log(`      … pausa ${Math.round((Date.now() - t) / 1000)}s\n`);
+      console.log(`      … pause ${Math.round((Date.now() - t) / 1000)}s\n`);
     }
   }
 
-  console.log('\n──────── RIEPILOGO ────────');
+  console.log('\n───────── SUMMARY ─────────');
   for (const r of out) console.log(`${r.status.toUpperCase().padEnd(12)} ${r.name} — ${r.detail}`);
   console.log('───────────────────────────\n');
   await session.close();
 }
 
 main().catch((e) => {
-  console.error('errore:', e);
+  console.error('error:', e);
   process.exit(1);
 });

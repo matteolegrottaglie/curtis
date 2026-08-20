@@ -1,12 +1,12 @@
 // ============================================================
-//  Impedisce al Mac di addormentarsi mentre il motore lavora.
+//  Keeps the Mac from falling asleep while the engine is working.
 //
-//  Senza questo, su macOS il sistema va in sleep dopo pochi minuti di
-//  inattività dell'utente e l'automazione resta congelata a metà
-//  sequenza. Nel progetto originale il trucco stava nello script del
-//  LaunchAgent (`caffeinate -si npm start`); qui vive nel daemon, così
-//  tiene sveglia la macchina SOLO nei minuti in cui il motore lavora
-//  davvero, non per tutta la giornata.
+//  Without this, macOS goes to sleep after a few minutes of user
+//  inactivity and the automation is left frozen halfway through a
+//  sequence. In the original project the trick lived in the LaunchAgent
+//  script (`caffeinate -si npm start`); here it lives in the daemon, so
+//  it keeps the machine awake ONLY during the minutes the engine is
+//  actually working, not all day long.
 // ============================================================
 import { spawn, type ChildProcess } from 'node:child_process';
 import { log } from '../util/log.js';
@@ -21,14 +21,14 @@ export class KeepAwake {
   start(): void {
     if (this.#proc || process.platform !== 'darwin') return;
     try {
-      // -s: niente system sleep (efficace a corrente) · -i: niente idle sleep
+      // -s: no system sleep (effective on AC power) · -i: no idle sleep
       this.#proc = spawn('/usr/bin/caffeinate', ['-si'], { stdio: 'ignore', detached: false });
       this.#proc.on('exit', () => {
         this.#proc = null;
       });
-      log.debug('caffeinate attivo: il Mac resta sveglio mentre il motore lavora');
+      log.debug('caffeinate active: the Mac stays awake while the engine works');
     } catch (e) {
-      log.warn({ err: String(e) }, 'caffeinate non disponibile: il Mac potrebbe addormentarsi a metà sequenza');
+      log.warn({ err: String(e) }, 'caffeinate unavailable: the Mac may fall asleep mid-sequence');
       this.#proc = null;
     }
   }

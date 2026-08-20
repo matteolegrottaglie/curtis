@@ -1,5 +1,5 @@
 // ============================================================
-//  Tool sulle impostazioni di sicurezza (rampa, tetti, ritardi).
+//  Safety settings tools (ramp, ceilings, delays).
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -8,8 +8,9 @@ import { safetyConfigPatchSchema } from '../schemas.js';
 import { fromException, textBlock } from '../result.js';
 import type { SafetyConfig } from '../../types.js';
 
-// La config viaggia come oggetto libero: la forma esatta è già garantita
-// dalla validazione zod lato servizio, e ripeterla qui la renderebbe fragile.
+// The config travels as a free-form object: its exact shape is already
+// guaranteed by zod validation on the service side, and repeating it here
+// would only make things brittle.
 const safetyOutput = z.object({
   settings: z.record(z.string(), z.unknown()),
   summary: z.string(),
@@ -18,11 +19,11 @@ const safetyOutput = z.object({
 function summarize(c: SafetyConfig): string {
   const days = c.workingDays.join(',');
   return [
-    `Finestra: giorni ${days}, ${c.workStartHour}:00–${c.workEndHour}:00 (${c.timezone}).`,
-    `Tetto settimanale inviti ${c.weeklyInviteCeiling}, cap giornalieri: inviti ${c.caps.invites}, messaggi ${c.caps.messages}, visite ${c.caps.visits}.`,
-    `Rampa: ${c.ramp.map((r) => `sett.${r.week}→${r.dailyInvites}/g`).join(', ')}.`,
-    `Ritardo fra azioni ${Math.round(c.delays.betweenActionsMin / 1000)}–${Math.round(c.delays.betweenActionsMax / 1000)}s.`,
-    `Nota sull'invito: ${c.sendNoteOnConnect ? 'ATTIVA' : 'disattivata'}. Soglia acceptance ${Math.round(c.minAcceptanceRate * 100)}%.`,
+    `Window: days ${days}, ${c.workStartHour}:00–${c.workEndHour}:00 (${c.timezone}).`,
+    `Weekly invitation ceiling ${c.weeklyInviteCeiling}, daily caps: invites ${c.caps.invites}, messages ${c.caps.messages}, visits ${c.caps.visits}.`,
+    `Ramp: ${c.ramp.map((r) => `week ${r.week}→${r.dailyInvites}/day`).join(', ')}.`,
+    `Delay between actions ${Math.round(c.delays.betweenActionsMin / 1000)}–${Math.round(c.delays.betweenActionsMax / 1000)}s.`,
+    `Invitation note: ${c.sendNoteOnConnect ? 'ON' : 'off'}. Acceptance threshold ${Math.round(c.minAcceptanceRate * 100)}%.`,
   ].join(' ');
 }
 
@@ -30,9 +31,9 @@ export function registerSafetyTools(server: MCPServer): void {
   server.tool(
     {
       name: 'get_safety_settings',
-      title: 'Leggi le impostazioni di sicurezza',
+      title: 'Read the safety settings',
       description:
-        'Restituisce rampa di warm-up, tetti giornalieri e settimanali, finestra oraria, ritardi fra le azioni e soglie del controller adattivo.',
+        'Returns the warm-up ramp, the daily and weekly ceilings, the working window, the delays between actions and the adaptive controller thresholds.',
       inputSchema: z.object({}),
       outputSchema: safetyOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -50,9 +51,9 @@ export function registerSafetyTools(server: MCPServer): void {
   server.tool(
     {
       name: 'update_safety_settings',
-      title: 'Modifica le impostazioni di sicurezza',
+      title: 'Change the safety settings',
       description:
-        "Aggiorna solo i campi che passi; il resto resta com'è. ATTENZIONE: alzare weeklyInviteCeiling, i caps o accorciare i delays aumenta concretamente il rischio di restrizione dell'account. Prima di alzarli, dillo esplicitamente all'utente e chiedi conferma. Abbassarli è sempre sicuro.",
+        "Updates only the fields you pass; everything else stays as it is. WARNING: raising weeklyInviteCeiling or the caps, or shortening the delays, measurably increases the risk of getting the account restricted. Before raising them, say so explicitly to the user and ask for confirmation. Lowering them is always safe.",
       inputSchema: safetyConfigPatchSchema,
       outputSchema: safetyOutput,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -62,11 +63,11 @@ export function registerSafetyTools(server: MCPServer): void {
         const c = safety.updateSafetySettings(patch);
         const summary = summarize(c);
         return {
-          content: [textBlock(`Impostazioni aggiornate. ${summary}`)],
+          content: [textBlock(`Settings updated. ${summary}`)],
           structuredContent: { settings: c as unknown as Record<string, unknown>, summary },
         };
       } catch (err) {
-        return fromException(err, 'Aggiornamento non riuscito');
+        return fromException(err, 'Update failed');
       }
     },
   );

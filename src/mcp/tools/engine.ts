@@ -1,5 +1,5 @@
 // ============================================================
-//  Tool di controllo del motore: stato e comandi.
+//  Engine control tools: status and commands.
 // ============================================================
 import { z } from 'zod';
 import type { MCPServer } from 'mcp-use';
@@ -8,35 +8,35 @@ import * as controller from '../../safety/controller.js';
 import { errorResult, fromException, textBlock } from '../result.js';
 
 const engineStatusSchema = z.object({
-  running: z.boolean().describe('Il worker loop è attivo'),
-  paused: z.boolean().describe('Pausa manuale'),
-  halted: z.boolean().describe('Stop di sicurezza: serve intervento umano su LinkedIn'),
+  running: z.boolean().describe('The worker loop is active'),
+  paused: z.boolean().describe('Manual pause'),
+  halted: z.boolean().describe('Safety stop: a human has to deal with something on LinkedIn'),
   halted_reason: z.string().nullable(),
-  in_working_window: z.boolean().describe('Siamo dentro la finestra di giorni/orari configurata'),
-  backoff_until: z.number().nullable().describe('Epoch ms fino a cui gli inviti sono sospesi'),
-  daily_invite_target: z.number().describe('Inviti previsti oggi dalla rampa, già corretti dal controller'),
-  weekly_ceiling: z.number().describe('Tetto settimanale adattivo attualmente in vigore'),
+  in_working_window: z.boolean().describe('We are inside the configured days/hours window'),
+  backoff_until: z.number().nullable().describe('Epoch ms until which invitations are suspended'),
+  daily_invite_target: z.number().describe('Invitations planned for today by the ramp, already adjusted by the controller'),
+  weekly_ceiling: z.number().describe('Adaptive weekly ceiling currently in force'),
   invites_today: z.number(),
   invites_last_7_days: z.number(),
-  pending_invites: z.number().describe('Inviti inviati e non ancora accettati'),
+  pending_invites: z.number().describe('Invitations sent and not yet accepted'),
   acceptance_rate_30d: z.number().nullable(),
   logged_in: z.boolean(),
   account: z.string().nullable(),
-  note: z.string().describe('Cosa sta facendo adesso il motore'),
+  note: z.string().describe('What the engine is doing right now'),
 });
 
 function summarize(s: Record<string, unknown>): string {
   const lines: string[] = [];
-  if (s.halted) lines.push(`⛔ HALT: ${s.halted_reason}. Risolvi la segnalazione su LinkedIn, poi engine_control action="clear_halt".`);
-  else if (!s.running) lines.push('Motore fermo.');
-  else if (s.paused) lines.push('Motore in pausa.');
-  else if (!s.in_working_window) lines.push('Motore attivo ma fuori dalla finestra oraria configurata: riprenderà da solo.');
-  else lines.push(`Motore attivo — ${String(s.note ?? '')}`);
+  if (s.halted) lines.push(`⛔ HALT: ${s.halted_reason}. Clear the flag on LinkedIn, then engine_control action="clear_halt".`);
+  else if (!s.running) lines.push('Engine stopped.');
+  else if (s.paused) lines.push('Engine paused.');
+  else if (!s.in_working_window) lines.push('Engine active but outside the configured working window: it will resume on its own.');
+  else lines.push(`Engine active — ${String(s.note ?? '')}`);
   lines.push(
-    `Inviti oggi ${s.invites_today}/${s.daily_invite_target}, ultimi 7 giorni ${s.invites_last_7_days}/${s.weekly_ceiling}, pendenti ${s.pending_invites}.`,
+    `Invitations today ${s.invites_today}/${s.daily_invite_target}, last 7 days ${s.invites_last_7_days}/${s.weekly_ceiling}, pending ${s.pending_invites}.`,
   );
   const acc = s.acceptance_rate_30d as number | null;
-  lines.push(acc === null ? 'Acceptance rate: non ancora misurabile.' : `Acceptance rate 30 giorni: ${Math.round(acc * 100)}%.`);
+  lines.push(acc === null ? 'Acceptance rate: not measurable yet.' : `Acceptance rate over 30 days: ${Math.round(acc * 100)}%.`);
   return lines.join(' ');
 }
 
@@ -66,9 +66,9 @@ export function registerEngineTools(server: MCPServer, engine: Engine): void {
   server.tool(
     {
       name: 'engine_status',
-      title: 'Stato del motore',
+      title: 'Engine status',
       description:
-        'Fotografia completa: motore attivo o fermo, halt di sicurezza, finestra oraria, limiti in vigore, inviti di oggi e della settimana, inviti pendenti, acceptance rate. Usalo per rispondere a "come sta andando?".',
+        'The full picture: engine running or stopped, safety halts, working window, limits in force, invitations sent today and this week, pending invitations, acceptance rate. Use it to answer "how is it going?".',
       inputSchema: z.object({}),
       outputSchema: engineStatusSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -82,16 +82,16 @@ export function registerEngineTools(server: MCPServer, engine: Engine): void {
   server.tool(
     {
       name: 'engine_control',
-      title: 'Comanda il motore',
+      title: 'Command the engine',
       description:
-        'start: apre il browser e comincia a lavorare sulle campagne in stato "running" (rispettando finestra oraria, rampa e tetti). stop: ferma il loop e chiude il browser. pause / resume: sospensione manuale senza chiudere il browser. clear_halt: azzera uno stop di sicurezza — fallo SOLO dopo che l\'utente ha risolto la segnalazione su LinkedIn (captcha, verifica, restrizione), altrimenti si riparte dritti nel problema.',
+        'start: opens the browser and begins working through the campaigns in "running" state (respecting the working window, the ramp and the ceilings). stop: halts the loop and closes the browser. pause / resume: manual suspension without closing the browser. clear_halt: clears a safety stop — do this ONLY after the user has dealt with the flag on LinkedIn (captcha, verification, restriction), otherwise you walk straight back into the problem.',
       inputSchema: z.object({
         action: z.enum(['start', 'stop', 'pause', 'resume', 'clear_halt']),
       }),
       outputSchema: engineStatusSchema,
-      // destructiveHint: "start" fa partire invii reali a persone reali.
-      // Ritirare un invito non lo annulla: LinkedIn impedisce di reinvitare
-      // la stessa persona per ~3 settimane. Il client deve chiedere conferma.
+      // destructiveHint: "start" fires real invitations at real people.
+      // Withdrawing an invitation does not undo it: LinkedIn blocks re-inviting
+      // the same person for ~3 weeks. The client must ask for confirmation.
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     async ({ action }) => {
@@ -101,12 +101,12 @@ export function registerEngineTools(server: MCPServer, engine: Engine): void {
             const st = engine.status();
             if (st.halted) {
               return errorResult(
-                `Non avvio: c'è uno stop di sicurezza attivo (${st.haltedReason}). Risolvi su LinkedIn, poi usa clear_halt.`,
+                `Not starting: a safety stop is active (${st.haltedReason}). Sort it out on LinkedIn, then use clear_halt.`,
               );
             }
             const auth = await engine.authStatus();
             if (!auth.loggedIn) {
-              return errorResult('Non avvio: sessione LinkedIn assente. Usa prima linkedin_login.');
+              return errorResult('Not starting: no LinkedIn session. Use linkedin_login first.');
             }
             await engine.start();
             break;
@@ -125,9 +125,9 @@ export function registerEngineTools(server: MCPServer, engine: Engine): void {
             break;
         }
         const data = await readStatus();
-        return { content: [textBlock(`Comando "${action}" eseguito. ${summarize(data)}`)], structuredContent: data };
+        return { content: [textBlock(`Command "${action}" executed. ${summarize(data)}`)], structuredContent: data };
       } catch (err) {
-        return fromException(err, `Comando "${action}" non riuscito`);
+        return fromException(err, `Command "${action}" failed`);
       }
     },
   );
