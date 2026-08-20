@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP/security/advisories/new
+    url: https://github.com/matteolegrottaglie/curtis/security/advisories/new
     about: Report privately through a GitHub security advisory. Never in a public issue.
   - name: My account got restricted
     url: https://www.linkedin.com/help/linkedin/answer/a551012

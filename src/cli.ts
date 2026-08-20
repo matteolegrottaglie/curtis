@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-//  `lksq` — the command line interface.
+//  `curtis` — the command line interface.
 //
 //  It only covers the lifecycle: install, start, service, health
 //  checks. The real work (imports, campaigns, sends) is driven from
@@ -19,7 +19,15 @@ import {
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
-import { appConfig, dataDirPermissionProblem, ensureDataDir, getAuthToken, mcpUrl, paths } from './config.js';
+import {
+  appConfig,
+  dataDirPermissionProblem,
+  ensureDataDir,
+  getAuthToken,
+  mcpUrl,
+  paths,
+  USING_LEGACY_DATA_DIR,
+} from './config.js';
 import { VERSION } from './version.js';
 import { installService, isServiceInstalled, servicePath, uninstallService } from './platform/service.js';
 
@@ -100,7 +108,7 @@ remove it. You run it on your own account, at your own risk.
 
 async function cmdSetup(args: string[]): Promise<void> {
   const skipPrompt = args.includes('--yes') || args.includes('-y');
-  console.log(`\n${bold(`LinkedIn Sequencer MCP v${VERSION}`)} — initial setup\n`);
+  console.log(`\n${bold(`Curtis v${VERSION}`)} — initial setup\n`);
   console.log(RISK_NOTICE);
   console.log();
 
@@ -131,16 +139,16 @@ async function cmdSetup(args: string[]): Promise<void> {
   }
 
   console.log(`\n${bold('Next steps')}`);
-  console.log(`  1. Start the daemon:           ${bold('lksq daemon start')}`);
-  console.log(`  2. Connect the MCP client:     ${bold('lksq mcp-config')}`);
+  console.log(`  1. Start the daemon:           ${bold('curtis daemon start')}`);
+  console.log(`  2. Connect the MCP client:     ${bold('curtis mcp-config')}`);
   console.log(`  3. From chat: "log in to LinkedIn" → the browser opens, sign in by hand once`);
   console.log(`  4. From chat: "import this CSV and start sending the requests"\n`);
-  console.log(dim(`  To keep campaigns moving with the client closed: lksq service install\n`));
+  console.log(dim(`  To keep campaigns moving with the client closed: curtis service install\n`));
 }
 
 /**
  * Checks the browser that will ACTUALLY be used, not just any browser installed
- * on the system: `lksq doctor` has to fail here, not at the first login.
+ * on the system: `curtis doctor` has to fail here, not at the first login.
  */
 async function detectBrowser(): Promise<{ ok: boolean; detail: string; fix?: string }> {
   if (appConfig.browserChannel === 'chrome') {
@@ -180,7 +188,7 @@ async function cmdDaemonStart(): Promise<void> {
     return;
   }
   if (CLI_PATH.endsWith('.ts')) {
-    console.error(red('`daemon start` needs the build: run `npm run build`, or use `lksq start` in the foreground.'));
+    console.error(red('`daemon start` needs the build: run `npm run build`, or use `curtis start` in the foreground.'));
     process.exit(1);
   }
 
@@ -289,7 +297,7 @@ async function cmdLogin(): Promise<void> {
   if (daemonPid() !== null) {
     console.error(
       red('The daemon is running and owns the browser profile.') +
-        '\nLog in from chat with the `linkedin_login` tool, or stop the daemon with `lksq daemon stop` and retry.',
+        '\nLog in from chat with the `linkedin_login` tool, or stop the daemon with `curtis daemon stop` and retry.',
     );
     process.exit(1);
   }
@@ -311,19 +319,19 @@ function cmdMcpConfig(): void {
   console.log(`\n${bold('Claude Code')}`);
   if (token) {
     console.log(
-      `  claude mcp add --transport http linkedin-sequencer ${url} \\\n    --header "Authorization: Bearer ${token}"`,
+      `  claude mcp add --transport http curtis ${url} \\\n    --header "Authorization: Bearer ${token}"`,
     );
   } else {
-    console.log(`  claude mcp add --transport http linkedin-sequencer ${url}`);
+    console.log(`  claude mcp add --transport http curtis ${url}`);
   }
 
   console.log(`\n${bold('Codex')} ${dim('(~/.codex/config.toml)')}`);
-  console.log(`  [mcp_servers.linkedin_sequencer]`);
+  console.log(`  [mcp_servers.curtis]`);
   console.log(`  url = "${url}"`);
   if (token) {
-    console.log(`  bearer_token_env_var = "LKSQ_TOKEN"`);
+    console.log(`  bearer_token_env_var = "CURTIS_TOKEN"`);
     console.log(`\n  ${dim('and in your shell profile:')}`);
-    console.log(`  export LKSQ_TOKEN="${token}"`);
+    console.log(`  export CURTIS_TOKEN="${token}"`);
   }
   console.log(`\n${dim(`The token lives in ${paths.token} (0600). Don't share it: it grants access to your LinkedIn account.`)}\n`);
 }
@@ -343,10 +351,13 @@ async function cmdDoctor(): Promise<void> {
     // does not throw when it fails. Report what is actually on disk: a "✓" on
     // a world-readable data directory is worse than no check at all.
     const permProblem = dataDirPermissionProblem();
+    // Say which directory is in use when it is the pre-rename one: otherwise
+    // "why is Curtis writing to .linkedin-sequencer-mcp?" is a puzzle.
+    const legacyNote = USING_LEGACY_DATA_DIR ? ' — pre-rename directory, still in use on purpose' : '';
     checks.push({
       label: 'Data directory',
       ok: permProblem === null,
-      detail: permProblem ?? `${appConfig.dataDir} (0700, owner only)`,
+      detail: permProblem ?? `${appConfig.dataDir} (0700, owner only)${legacyNote}`,
     });
   } catch (e) {
     checks.push({ label: 'Data directory', ok: false, detail: String(e) });
@@ -383,7 +394,7 @@ async function cmdDoctor(): Promise<void> {
     ok: existsSync(paths.browserProfile),
     detail: existsSync(paths.browserProfile)
       ? 'browser profile present (check it is still valid with linkedin_auth_status)'
-      : 'never logged in — use `lksq login` or the linkedin_login tool',
+      : 'never logged in — use `curtis login` or the linkedin_login tool',
   });
 
   const h = await health();
@@ -391,7 +402,7 @@ async function cmdDoctor(): Promise<void> {
   checks.push({
     label: 'Daemon',
     ok: h.ok,
-    detail: h.ok ? `running on ${mcpUrl()}${pid ? ` (pid ${pid})` : ''}` : `stopped — start it with \`lksq daemon start\``,
+    detail: h.ok ? `running on ${mcpUrl()}${pid ? ` (pid ${pid})` : ''}` : `stopped — start it with \`curtis daemon start\``,
   });
 
   checks.push({
@@ -400,7 +411,7 @@ async function cmdDoctor(): Promise<void> {
     detail: isServiceInstalled() ? servicePath() : 'not installed (campaigns only advance while the daemon is up)',
   });
 
-  console.log(`\n${bold(`LinkedIn Sequencer MCP v${VERSION}`)}\n`);
+  console.log(`\n${bold(`Curtis v${VERSION}`)}\n`);
   for (const c of checks) {
     const mark = c.ok ? green('✓') : yellow('!');
     console.log(`  ${mark} ${c.label.padEnd(20)} ${c.detail}`);
@@ -432,38 +443,43 @@ async function cmdService(args: string[]): Promise<void> {
   } else if (sub === 'status') {
     console.log(isServiceInstalled() ? `installed: ${servicePath()}` : 'not installed');
   } else {
-    console.error('Usage: lksq service install [--no-autostart] | uninstall | status');
+    console.error('Usage: curtis service install [--no-autostart] | uninstall | status');
     process.exit(1);
   }
 }
 
 function usage(): void {
   console.log(`
-${bold(`LinkedIn Sequencer MCP v${VERSION}`)}
-MCP server to automate LinkedIn from your own machine, driven from chat.
+${bold(`Curtis v${VERSION}`)}
+Runs your LinkedIn outreach from your own machine, driven from chat.
 
 ${bold('Commands')}
-  lksq setup [--yes]              initial setup (data, token, browser)
-  lksq start                      run the daemon in the foreground
-  lksq daemon start|stop|status   manage the daemon in the background
-  lksq logs [-f] [-n100]          show the daemon log
-  lksq login                      LinkedIn login from the terminal (daemon stopped)
-  lksq mcp-config                 print the configuration for Claude Code and Codex
-  lksq service install|uninstall|status
-                                  install the daemon as a user service
-  lksq doctor                     diagnose the installation
-  lksq version
+  curtis setup [--yes]               initial setup (data, token, browser)
+  curtis start                       run the daemon in the foreground
+  curtis daemon start|stop|status    manage the daemon in the background
+  curtis logs [-f] [-n100]           show the daemon log
+  curtis login                       LinkedIn login from the terminal (daemon stopped)
+  curtis mcp-config                  print the config for Claude Code and Codex
+  curtis service install|uninstall|status
+                                     install the daemon as a user service
+  curtis doctor                      diagnose the installation
+  curtis version
 
 ${bold('Environment variables')}
-  LKSQ_DATA_DIR   data directory (default ~/.linkedin-sequencer-mcp)
-  LKSQ_PORT       daemon port (default 4311)
-  LKSQ_NO_AUTH=1  disable the token on the MCP endpoint (debug only)
-  TIMEZONE        timezone of the sending window (default Europe/Rome)
-  BROWSER_CHANNEL 'chrome' to use the system Chrome, 'chromium' for Playwright's
-  HEADFUL         'true' to keep the window visible (default: works in the background)
-  LOG_LEVEL       trace | debug | info | warn | error | silent (default info)
+  CURTIS_DATA_DIR    data directory (default ~/.curtis)
+  CURTIS_PORT        daemon port (default 4311)
+  CURTIS_NO_AUTH=1   disable the token on the MCP endpoint (debug only)
+  TIMEZONE           timezone of the sending window (default Europe/Rome)
+  BROWSER_CHANNEL    'chrome' for the system Chrome, 'chromium' for Playwright's
+  HEADFUL            'true' keeps the browser window visible (default: background)
+  LOG_LEVEL          trace | debug | info | warn | error | silent (default info)
+
+${dim("Curtis used to be called LinkedIn Sequencer. `lksq` still works as an alias,")}
+${dim("the LKSQ_* variables are still read, and an existing ~/.linkedin-sequencer-mcp")}
+${dim("keeps being used as the data directory.")}
 `);
 }
+
 
 // ------------------------------------------------------------
 //  Dispatch
@@ -481,7 +497,7 @@ async function main(): Promise<void> {
       if (sub === 'stop') return cmdDaemonStop();
       if (sub === 'status' || sub === undefined) return cmdDaemonStatus();
       if (sub === 'logs') return void cmdLogs(rest.slice(1));
-      console.error('Usage: lksq daemon start|stop|status|logs');
+      console.error('Usage: curtis daemon start|stop|status|logs');
       process.exit(1);
       return;
     }

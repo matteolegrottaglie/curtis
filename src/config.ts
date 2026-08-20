@@ -1,12 +1,16 @@
 // ============================================================
 //  Configuration: infrastructure + safety defaults.
 //
-//  Unlike the original project (a dashboard launched from the repo
-//  folder), here the `lksq` binary is installed globally: the
-//  working directory is arbitrary, so the data lives in a user
-//  directory, not in `./data`.
+//  The `curtis` binary is installed globally, so the working
+//  directory is arbitrary and the data lives in a user directory
+//  rather than in `./data`.
 //
 //  Resolution order: process.env  ->  <dataDir>/.env  ->  defaults.
+//
+//  Every setting is read through env(), which accepts both the
+//  CURTIS_* name and the older LKSQ_* one. The project was called
+//  LinkedIn Sequencer before it was called Curtis, and an install
+//  that predates the rename must keep working untouched.
 // ============================================================
 import { readFileSync, existsSync, mkdirSync, writeFileSync, chmodSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -20,13 +24,40 @@ function expandHome(p: string): string {
 }
 
 /**
- * Data directory: SQLite DB, browser profile (LinkedIn session), token,
- * screenshots and logs. Overridable with `LKSQ_DATA_DIR` — which is also how
- * you reuse the original project's data by pointing at its `./data`.
+ * Reads a setting, accepting the current `CURTIS_*` name and the legacy
+ * `LKSQ_*` one. The current name wins when both are set.
  */
-export const DATA_DIR: string = process.env.LKSQ_DATA_DIR?.trim()
-  ? expandHome(process.env.LKSQ_DATA_DIR.trim())
-  : join(homedir(), '.linkedin-sequencer-mcp');
+export function env(name: string): string | undefined {
+  const v = process.env[`CURTIS_${name}`]?.trim() || process.env[`LKSQ_${name}`]?.trim();
+  return v || undefined;
+}
+
+/** Directory used before the project was renamed to Curtis. */
+const LEGACY_DATA_DIR = join(homedir(), '.linkedin-sequencer-mcp');
+
+/**
+ * Data directory: SQLite DB, browser profile (LinkedIn session), token,
+ * screenshots and logs. Overridable with `CURTIS_DATA_DIR`, which is also how
+ * you point at a data directory that lives somewhere else.
+ *
+ * With no override, an existing pre-rename directory keeps being used. The
+ * alternative — silently starting from an empty `~/.curtis` — would look like
+ * the tool had lost the LinkedIn session, the contacts and the campaign
+ * history, and would invite a second login while the old session sat intact
+ * one directory over.
+ */
+function resolveDataDir(): string {
+  const override = env('DATA_DIR');
+  if (override) return expandHome(override);
+  const current = join(homedir(), '.curtis');
+  if (!existsSync(current) && existsSync(LEGACY_DATA_DIR)) return LEGACY_DATA_DIR;
+  return current;
+}
+
+export const DATA_DIR: string = resolveDataDir();
+
+/** True when running against a data directory that predates the rename. */
+export const USING_LEGACY_DATA_DIR = DATA_DIR === LEGACY_DATA_DIR && !env('DATA_DIR');
 
 // --- mini .env parser (no dependencies) ---
 function loadDotEnv(dir: string): void {
@@ -91,7 +122,7 @@ export const appConfig: AppConfig = {
   // The MCP server always stays on loopback: it exposes actions that act on
   // the user's LinkedIn account, it must never listen publicly.
   host: '127.0.0.1',
-  port: Number(process.env.LKSQ_PORT ?? 4311),
+  port: Number(env('PORT') ?? 4311),
   dataDir: DATA_DIR,
   timezone: process.env.TIMEZONE ?? 'Europe/Rome',
   // Default: the browser works in the background. The window only opens for
@@ -125,7 +156,7 @@ const octal = (mode: number): string => `0${(mode & 0o7777).toString(8).padStart
  * install made by an earlier version the directory is already there, and the
  * mode argument is silently ignored. So existing ones have to be chmod'd.
  *
- * Tightening is announced, because `LKSQ_DATA_DIR` can point at a pre-existing
+ * Tightening is announced, because `CURTIS_DATA_DIR` can point at a pre-existing
  * directory of the user's choosing and changing its permissions behind their
  * back would be rude.
  */
@@ -200,7 +231,7 @@ export function ensureDataDir(): void {
  */
 function warn(msg: string): void {
   try {
-    process.stderr.write(`[lksq] WARNING: ${msg}\n`);
+    process.stderr.write(`[curtis] WARNING: ${msg}\n`);
   } catch {
     // stderr closed (detached daemon): nothing sensible left to do
   }
@@ -214,10 +245,10 @@ function warn(msg: string): void {
  * anti DNS-rebinding check fail. Whoever reaches it can send invites and
  * messages in the user's name. Generated on first run, 0600.
  *
- * With `LKSQ_NO_AUTH=1` authentication is disabled (debug only).
+ * With `CURTIS_NO_AUTH=1` authentication is disabled (debug only).
  */
 export function getAuthToken(): string | null {
-  if (process.env.LKSQ_NO_AUTH === '1') return null;
+  if (env('NO_AUTH') === '1') return null;
   if (existsSync(paths.token)) {
     const t = readFileSync(paths.token, 'utf8').trim();
     if (t) return t;

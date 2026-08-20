@@ -8,10 +8,10 @@ body:
       value: |
         For an action that fails on **every** contact, use the *Selector broken* template
         instead. For a security issue, do **not** open an issue — see
-        [SECURITY.md](https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP/blob/main/SECURITY.md).
+        [SECURITY.md](https://github.com/matteolegrottaglie/curtis/blob/main/SECURITY.md).
 
-        ⚠️ **Never paste your token, session data, or real contacts.** `lksq doctor` output is
-        safe; `lksq mcp-config` output is **not** — it contains your token.
+        ⚠️ **Never paste your token, session data, or real contacts.** `curtis doctor` output is
+        safe; `curtis mcp-config` output is **not** — it contains your token.
 
   - type: textarea
     id: what
@@ -26,7 +26,7 @@ body:
     attributes:
       label: How to reproduce
       placeholder: |
-        1. lksq daemon start
+        1. curtis daemon start
         2. from chat: "import ~/list.csv"
         3. ...
     validations:
@@ -35,7 +35,7 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `lksq doctor`
+      label: Output of `curtis doctor`
       render: text
     validations:
       required: true
@@ -44,7 +44,7 @@ body:
     id: logs
     attributes:
       label: Relevant log lines
-      description: From `lksq logs -n100`. Redact anything personal.
+      description: From `curtis logs -n100`. Redact anything personal.
       render: text
 
   - type: input

@@ -45,8 +45,8 @@ banner, and the hidden "Send" that stole the match. Every fix should leave a fix
 ## Setup
 
 ```bash
-git clone https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP.git
-cd Linkedin-Sequencer-MCP
+git clone https://github.com/matteolegrottaglie/curtis.git
+cd curtis
 npm install
 npm run typecheck
 npm test
@@ -56,7 +56,7 @@ Node ≥ 22.22.2 is required (`mcp-use` v2). Work against a throwaway data direc
 touch your real database or session:
 
 ```bash
-LKSQ_DATA_DIR=/tmp/lksq-dev LKSQ_PORT=4399 npm run dev
+CURTIS_DATA_DIR=/tmp/curtis-dev CURTIS_PORT=4399 npm run dev
 ```
 
 ## Before opening a PR

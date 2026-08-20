@@ -53,7 +53,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `lksq version`
+      description: Output of `curtis version`
     validations:
       required: true
 

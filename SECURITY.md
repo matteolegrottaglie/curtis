@@ -24,7 +24,7 @@ the **untrusted-content** boundary (what LinkedIn pages and imported CSVs can ma
 - **Bearer token by default.** Generated with `crypto.randomBytes(24)` on first run, stored with
   mode `0600`, compared with `timingSafeEqual`. Only `/`, `/healthz` and `/favicon.ico` are
   reachable without it, and none of them expose account data.
-- **`LKSQ_NO_AUTH=1` disables authentication.** It exists for debugging. Do not use it: any
+- **`CURTIS_NO_AUTH=1` disables authentication.** It exists for debugging. Do not use it: any
   process on the machine — and any web page in your browser, absent rebinding protection — could
   then send invites as you.
 - **No telemetry.** The tool makes no network calls other than to LinkedIn itself. No data ever
@@ -39,7 +39,7 @@ the **untrusted-content** boundary (what LinkedIn pages and imported CSVs can ma
   land at `0644` — so the `0700` on the directory is what keeps them private: without execute
   permission on a directory no other user can resolve a name inside it. If that chmod cannot be
   applied (directory owned by someone else, or an exFAT/SMB volume with no POSIX modes) the
-  startup prints a warning and `lksq doctor` fails the check instead of reporting `✓`.
+  startup prints a warning and `curtis doctor` fails the check instead of reporting `✓`.
 - **Untrusted page text is sanitised before it reaches a model.** The `aria-label`s scraped from
   a profile are reported in `get_recent_actions` for diagnostics, which puts page-controlled text
   into a model's context. They are stripped of control characters, collapsed to a single line and
@@ -52,14 +52,14 @@ the **untrusted-content** boundary (what LinkedIn pages and imported CSVs can ma
 Please report security issues **privately**, not as a public issue.
 
 Use GitHub's private vulnerability reporting: go to the
-[Security tab](https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP/security/advisories/new)
+[Security tab](https://github.com/matteolegrottaglie/curtis/security/advisories/new)
 and open a draft advisory.
 
 Include:
 
 - what an attacker can achieve, and from what starting position;
 - the file and line, or a reproduction;
-- the version (`lksq version`) and your OS.
+- the version (`curtis version`) and your OS.
 
 This is a hobby project maintained in spare time — expect a best-effort response within a couple
 of weeks, not an SLA. Fixes land on `main`; there are no backported release branches.
@@ -77,7 +77,7 @@ of weeks, not an SLA. Fixes land on `main`; there are no backported release bran
 - Keep the data directory on an encrypted volume (FileVault, LUKS). The browser profile is a
   password equivalent.
 - Never commit or copy `<data-dir>/` anywhere. It is git-ignored for a reason.
-- Do not share the output of `lksq mcp-config`: it prints your token.
+- Do not share the output of `curtis mcp-config`: it prints your token.
 - Screenshots saved on failure may contain private messages and third parties' names. Review
   before attaching one to a bug report.
 - Revoke access by deleting `<data-dir>/token` (rotates on next start) and logging out of the

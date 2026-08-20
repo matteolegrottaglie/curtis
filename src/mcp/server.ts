@@ -34,7 +34,7 @@ const PUBLIC_PATHS = new Set(['/', '/healthz', '/favicon.ico']);
 const LANDING_PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LinkedIn Sequencer MCP</title>
+<title>Curtis</title>
 <style>
  :root{color-scheme:light dark}
  body{font:15px/1.6 system-ui,-apple-system,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1.5rem}
@@ -42,18 +42,18 @@ const LANDING_PAGE = `<!doctype html>
  .dot{display:inline-block;width:.6em;height:.6em;border-radius:50%;background:#22c55e;margin-right:.5em}
 </style></head>
 <body>
-<h1><span class="dot"></span>LinkedIn Sequencer MCP</h1>
+<h1><span class="dot"></span>Curtis</h1>
 <p>The daemon is running. The MCP endpoint is <code>/mcp</code> and requires a bearer token.</p>
 <p>There is no web interface: everything is driven from chat, in Claude Code or Codex.
-For the configuration line run <code>lksq mcp-config</code>.</p>
+For the configuration line run <code>curtis mcp-config</code>.</p>
 </body></html>`;
 
 export function buildMcpServer(engine: Engine): MCPServer {
   const token = getAuthToken();
 
   const server = new MCPServer({
-    name: 'linkedin-sequencer',
-    title: 'LinkedIn Sequencer',
+    name: 'curtis',
+    title: 'Curtis',
     version: VERSION,
     description:
       'Local LinkedIn automation: login, importing contact lists and gradually sending connection requests and messages, under conservative rate limits.',
@@ -79,15 +79,15 @@ export function buildMcpServer(engine: Engine): MCPServer {
     const header = c.req.header('authorization') ?? '';
     const given = header.toLowerCase().startsWith('bearer ')
       ? header.slice(7).trim()
-      : (c.req.header('x-lksq-token') ?? '');
+      : (c.req.header('x-curtis-token') ?? '');
     if (!given || !tokenMatches(given, token)) {
-      return c.json({ error: 'unauthorized', hint: 'run `lksq mcp-config` to get the token' }, 401);
+      return c.json({ error: 'unauthorized', hint: 'run `curtis mcp-config` to get the token' }, 401);
     }
     return next();
   });
 
   server.get('/', (c) => c.html(LANDING_PAGE));
-  server.get('/healthz', (c) => c.json({ ok: true, name: 'linkedin-sequencer-mcp', version: VERSION }));
+  server.get('/healthz', (c) => c.json({ ok: true, name: 'curtis', version: VERSION }));
 
   registerAuthTools(server, engine);
   registerContactTools(server);

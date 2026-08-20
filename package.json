@@ -1,34 +1,39 @@
 {
-  "name": "linkedin-sequencer-mcp",
+  "name": "curtis",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "MCP server that runs LinkedIn outreach from your own machine: login, contact import and gradual connection requests, driven entirely from chat (Claude Code, Codex).",
+  "description": "Curtis is an MCP server that runs your LinkedIn outreach from your own machine: it logs in once, works through your contact list, and sends connection requests slowly enough to look like you.",
   "keywords": [
+    "curtis",
     "mcp",
     "model-context-protocol",
+    "mcp-server",
     "linkedin",
     "outreach",
-    "automation",
+    "networking",
     "playwright",
     "claude-code",
     "codex",
-    "sequencer"
+    "rate-limiting",
+    "browser-automation",
+    "ai-agents"
   ],
   "license": "MIT",
   "author": "Matteo Legrottaglie",
-  "homepage": "https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP#readme",
+  "homepage": "https://github.com/matteolegrottaglie/curtis#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP.git"
+    "url": "git+https://github.com/matteolegrottaglie/curtis.git"
   },
   "bugs": {
-    "url": "https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP/issues"
+    "url": "https://github.com/matteolegrottaglie/curtis/issues"
   },
   "engines": {
     "node": ">=22.22.2"
   },
   "bin": {
+    "curtis": "dist/cli.js",
     "lksq": "dist/cli.js"
   },
   "files": [

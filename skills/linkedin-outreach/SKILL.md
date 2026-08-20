@@ -1,9 +1,9 @@
 ---
 name: linkedin-outreach
-description: Playbook for using the LinkedIn Sequencer MCP server — preparing the contact list, writing the messages, reading the right numbers, and repairing selectors when LinkedIn changes the DOM. Use it when the user wants to send connection requests or messages on LinkedIn with this tool.
+description: Playbook for using the Curtis server — preparing the contact list, writing the messages, reading the right numbers, and repairing selectors when LinkedIn changes the DOM. Use it when the user wants to send connection requests or messages on LinkedIn with this tool.
 ---
 
-# LinkedIn outreach with LinkedIn Sequencer
+# LinkedIn outreach with Curtis
 
 The MCP server already carries its own manual in its `instructions` (operation order, limits,
 handling a HALT). This skill covers what those instructions cannot say: how to prepare a campaign

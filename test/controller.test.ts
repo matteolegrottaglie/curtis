@@ -1,5 +1,5 @@
 // Adaptive controller: ramp-up, caps, backoff and halt.
-// Runs against a throwaway database: LKSQ_DATA_DIR must be set BEFORE
+// Runs against a throwaway database: CURTIS_DATA_DIR must be set BEFORE
 // importing config.ts, which reads it exactly once at import time.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,9 +7,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const DATA_DIR = mkdtempSync(join(tmpdir(), 'lksq-test-'));
-process.env.LKSQ_DATA_DIR = DATA_DIR;
-process.env.LKSQ_NO_AUTH = '1';
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'curtis-test-'));
+process.env.CURTIS_DATA_DIR = DATA_DIR;
+process.env.CURTIS_NO_AUTH = '1';
 process.env.LOG_LEVEL = 'silent';
 
 const { initDb, getDb } = await import('../src/db/index.js');

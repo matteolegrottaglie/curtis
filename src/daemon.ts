@@ -28,10 +28,10 @@ export async function runDaemon(): Promise<void> {
   const { url } = await server.listen();
 
   writeFileSync(paths.pid, `${process.pid}\n`);
-  log.info({ version: VERSION, dataDir: appConfig.dataDir }, 'LinkedIn Sequencer MCP started');
+  log.info({ version: VERSION, dataDir: appConfig.dataDir }, 'Curtis started');
   log.info(`🔌 MCP endpoint: ${url}`);
   if (getAuthToken() === null) {
-    log.warn('LKSQ_NO_AUTH=1: MCP endpoint with NO authentication. Debugging only.');
+    log.warn('CURTIS_NO_AUTH=1: MCP endpoint with NO authentication. Debugging only.');
   }
 
   // Keep the machine awake only while the engine is actually working.

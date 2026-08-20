@@ -13,8 +13,15 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { appConfig, paths } from '../config.js';
 
-export const SERVICE_LABEL = 'com.linkedin-sequencer-mcp';
-const SYSTEMD_UNIT = 'linkedin-sequencer-mcp.service';
+export const SERVICE_LABEL = 'com.curtis';
+const SYSTEMD_UNIT = 'curtis.service';
+
+// Names used before the project was renamed to Curtis. An install that predates
+// the rename has a service registered under these, and writing the new one
+// without clearing the old leaves two daemons fighting over the same browser
+// profile — which Playwright locks to a single process.
+const LEGACY_SERVICE_LABEL = 'com.linkedin-sequencer-mcp';
+const LEGACY_SYSTEMD_UNIT = 'linkedin-sequencer-mcp.service';
 
 export interface ServiceTarget {
   /** Node executable to use (the one the CLI is currently running under). */
@@ -31,8 +38,34 @@ export function servicePath(): string {
     : join(homedir(), '.config', 'systemd', 'user', SYSTEMD_UNIT);
 }
 
+/** Where the pre-rename service file would be, if one was ever installed. */
+export function legacyServicePath(): string {
+  return process.platform === 'darwin'
+    ? join(homedir(), 'Library', 'LaunchAgents', `${LEGACY_SERVICE_LABEL}.plist`)
+    : join(homedir(), '.config', 'systemd', 'user', LEGACY_SYSTEMD_UNIT);
+}
+
+/** Unregisters and deletes a pre-rename service, if present. Returns what it did. */
+function removeLegacyService(): string[] {
+  const legacy = legacyServicePath();
+  if (!existsSync(legacy)) return [];
+  const steps: string[] = [];
+  if (process.platform === 'darwin') {
+    const uid = process.getuid?.() ?? 501;
+    run('/bin/launchctl', ['bootout', `gui/${uid}/${LEGACY_SERVICE_LABEL}`]);
+    run('/bin/launchctl', ['unload', '-w', legacy]);
+  } else if (process.platform === 'linux') {
+    run('systemctl', ['--user', 'disable', '--now', LEGACY_SYSTEMD_UNIT]);
+    run('systemctl', ['--user', 'daemon-reload']);
+  }
+  rmSync(legacy, { force: true });
+  steps.push(`Removed the pre-rename service (${legacy})`);
+  return steps;
+}
+
+/** True if a service is registered under either the current or the old name. */
 export function isServiceInstalled(): boolean {
-  return existsSync(servicePath());
+  return existsSync(servicePath()) || existsSync(legacyServicePath());
 }
 
 function xmlEscape(s: string): string {
@@ -41,8 +74,8 @@ function xmlEscape(s: string): string {
 
 function plist(t: ServiceTarget): string {
   const env: Record<string, string> = {
-    LKSQ_DATA_DIR: appConfig.dataDir,
-    LKSQ_PORT: String(appConfig.port),
+    CURTIS_DATA_DIR: appConfig.dataDir,
+    CURTIS_PORT: String(appConfig.port),
     AUTOSTART_ENGINE: String(t.autostartEngine),
     // launchd starts with a bare-bones PATH: without this, `caffeinate` and the
     // system browsers cannot be found.
@@ -85,14 +118,14 @@ ${envXml}
 
 function systemdUnit(t: ServiceTarget): string {
   return `[Unit]
-Description=LinkedIn Sequencer MCP
+Description=Curtis
 After=graphical-session.target
 
 [Service]
 Type=simple
 ExecStart=${t.nodePath} ${t.cliPath} start
-Environment=LKSQ_DATA_DIR=${appConfig.dataDir}
-Environment=LKSQ_PORT=${appConfig.port}
+Environment=CURTIS_DATA_DIR=${appConfig.dataDir}
+Environment=CURTIS_PORT=${appConfig.port}
 Environment=AUTOSTART_ENGINE=${t.autostartEngine}
 WorkingDirectory=${appConfig.dataDir}
 Restart=always
@@ -116,7 +149,7 @@ function run(cmd: string, args: string[]): { ok: boolean; output: string } {
 export function installService(t: ServiceTarget): string[] {
   const target = servicePath();
   mkdirSync(dirname(target), { recursive: true });
-  const steps: string[] = [];
+  const steps: string[] = removeLegacyService();
 
   if (process.platform === 'darwin') {
     writeFileSync(target, plist(t));
@@ -144,7 +177,7 @@ export function installService(t: ServiceTarget): string[] {
 
 export function uninstallService(): string[] {
   const target = servicePath();
-  const steps: string[] = [];
+  const steps: string[] = removeLegacyService();
 
   if (process.platform === 'darwin') {
     const uid = process.getuid?.() ?? 501;
@@ -160,7 +193,7 @@ export function uninstallService(): string[] {
   if (existsSync(target)) {
     rmSync(target, { force: true });
     steps.push(`Removed ${target}`);
-  } else {
+  } else if (steps.length === 0) {
     steps.push('No service file to remove');
   }
   return steps;
