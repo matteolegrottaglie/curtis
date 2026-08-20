@@ -1,16 +1,18 @@
 // ============================================================
-//  Invio richieste di collegamento SENZA NOTA — v4.
+//  Invio richieste di collegamento SENZA NOTA, fuori dall'engine.
 //
-//  CAUSA RADICE (confermata da diag-deep):
-//  il controllo "Connect" della top-card è un <a> con
-//  aria-label "Invite <Nome> to connect" — NON un <button>, e senza
-//  role="button". Perciò getByRole('button', ...) -> 0 risultati, e
-//  tutto src/linkedin/selectors.ts è rotto contro la UI attuale.
+//  Ultimo passo del ciclo di riparazione dei selettori: dopo aver
+//  corretto `src/linkedin/selectors.ts` e visto verde su
+//  `npm run test:selectors`, serve un invio reale isolato per sapere
+//  se la UI vera si comporta come il DOM sintetico.
 //
-//  v3 falliva ancora perché richiedeva un <h1> per leggere il nome:
-//  nella UI attuale il nome NON è in un <h1>. Qui il target si ancora
-//  ai token del nome attesi (dal CSV), così non si tocca mai il
-//  "Connect" della sidebar "More profiles for you".
+//  Perché i selettori sono fatti così (vale anche qui):
+//   - il "Connect" della top-card è un <a> con aria-label
+//     "Invite <Nome> to connect", NON un <button> e senza
+//     role="button": `getByRole('button', ...)` restituisce zero;
+//   - il nome NON è in un <h1>, quindi il target si ancora ai token
+//     del nome attesi (dal CSV) e non tocca mai il "Connect" della
+//     sidebar "More profiles for you".
 //
 //  Fa SOLO: visita profilo + richiesta di collegamento senza nota.
 //  NB: nessuna funzione con nome dentro page.evaluate (esbuild/tsx
