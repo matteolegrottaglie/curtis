@@ -179,9 +179,21 @@ export async function probeTopCard(page: Page, tokens: string[], timeoutMs = 15_
             message: message?.raw,
             follow: follow?.raw,
             connected: connected?.raw,
+            // `sample` is page-controlled text that ends up in tool output and
+            // therefore in a model's context. Collapse whitespace, drop control
+            // characters and cap the length, so a hostile profile cannot smuggle
+            // a multi-line instruction block through an aria-label.
+            // NOTE: only `sample` is sanitised. The `labels.*` above are passed
+            // verbatim to byExactLabel() to click, and MUST stay byte-exact.
             sample: items
               .filter((i) => rxInteresting.test(i.norm))
-              .map((i) => i.raw)
+              .map((i) =>
+                i.raw
+                  .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim()
+                  .slice(0, 120),
+              )
               .slice(0, 10),
           };
         },

@@ -8,7 +8,7 @@
 //
 //  Resolution order: process.env  ->  <dataDir>/.env  ->  defaults.
 // ============================================================
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, chmodSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -116,8 +116,21 @@ export const paths = {
   accepted: join(DATA_DIR, 'terms-accepted'),
 } as const;
 
+/**
+ * Creates the data directory, owner-only.
+ *
+ * It holds the browser profile — the live LinkedIn session, a password
+ * equivalent — plus the contact database and the screenshots. On a machine
+ * with more than one account the default 0755 would leave all of that
+ * readable by every other user, so an existing directory is tightened too.
+ */
 export function ensureDataDir(): void {
-  mkdirSync(DATA_DIR, { recursive: true });
+  mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  try {
+    if ((statSync(DATA_DIR).mode & 0o077) !== 0) chmodSync(DATA_DIR, 0o700);
+  } catch {
+    // read-only or exotic filesystem: the directory exists, carry on
+  }
 }
 
 /**

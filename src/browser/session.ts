@@ -78,7 +78,9 @@ export class LinkedInSession {
 
   async #open(visible: boolean, userAgentOverride?: string): Promise<void> {
     const userDataDir = paths.browserProfile;
-    mkdirSync(userDataDir, { recursive: true });
+    // Owner-only: this directory IS the LinkedIn session. Anyone who can read
+    // it is logged in as the user, without a password and without 2FA.
+    mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
     const hints = readHints();
     const ua = userAgentOverride ?? (visible ? undefined : hints.userAgent);
 
@@ -276,7 +278,9 @@ export class LinkedInSession {
     const page = this.page;
     if (!page) return undefined;
     const dir = paths.screenshots;
-    mkdirSync(dir, { recursive: true });
+    // Failure screenshots can capture private messages and third parties'
+    // names, so they are owner-only like the rest of the data directory.
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     const path = join(dir, `${name}-${Date.now()}.png`);
     await page.screenshot({ path, fullPage: false }).catch(() => {});
     return path;

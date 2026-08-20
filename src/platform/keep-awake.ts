@@ -23,6 +23,13 @@ export class KeepAwake {
     try {
       // -s: no system sleep (effective on AC power) · -i: no idle sleep
       this.#proc = spawn('/usr/bin/caffeinate', ['-si'], { stdio: 'ignore', detached: false });
+      // Without an 'error' listener a failed spawn (binary missing, no
+      // permission) is emitted as an unhandled 'error' event, which takes the
+      // whole daemon down. Staying awake is a nicety; the daemon is not.
+      this.#proc.on('error', (err) => {
+        log.warn({ err: String(err) }, 'caffeinate failed to start: the Mac may fall asleep mid-sequence');
+        this.#proc = null;
+      });
       this.#proc.on('exit', () => {
         this.#proc = null;
       });

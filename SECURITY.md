@@ -31,6 +31,16 @@ the **untrusted-content** boundary (what LinkedIn pages and imported CSVs can ma
   leaves your machine.
 - **No password handling.** You log in by hand in a real browser window. The tool never sees,
   types, or stores credentials — only the resulting session.
+- **Owner-only data directory.** The data directory, the browser profile and the screenshots
+  directory are created `0700`, and an existing data directory with wider permissions is
+  tightened on startup. On a shared machine the default `0755` would leave the contact database
+  and the live session readable by every other local user.
+- **Untrusted page text is sanitised before it reaches a model.** The `aria-label`s scraped from
+  a profile are reported in `get_recent_actions` for diagnostics, which puts page-controlled text
+  into a model's context. They are stripped of control characters, collapsed to a single line and
+  truncated. Treat anything a tool reports back from LinkedIn as data, never as instructions.
+- **`file_path` is validated.** `import_contacts` takes a path from a model. It must be a regular
+  file and is capped at 25 MB.
 
 ## Reporting a vulnerability
 

@@ -73,7 +73,9 @@ export function normalizeProfileUrl(
   } catch {
     return null;
   }
-  if (!/linkedin\.com$/i.test(u.hostname) && !/\.linkedin\.com$/i.test(u.hostname)) return null;
+  // Anchored on purpose: an unanchored /linkedin\.com$/ also accepts
+  // "evil-linkedin.com". The host must be linkedin.com itself or a subdomain.
+  if (!/^(?:[a-z0-9-]+\.)*linkedin\.com$/i.test(u.hostname)) return null;
 
   const m = u.pathname.match(/\/in\/([^/]+)/i);
   const publicId = m && m[1] ? decodeURIComponent(m[1]) : null;

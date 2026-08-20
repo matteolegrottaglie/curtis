@@ -37,6 +37,24 @@ test('rejects non-LinkedIn domains and empty strings', () => {
   assert.equal(normalizeProfileUrl('   '), null);
 });
 
+test('a look-alike host is not LinkedIn', () => {
+  // An unanchored /linkedin\.com$/ used to accept all of these, and the row
+  // was then silently rewritten to www.linkedin.com — a typo, or a deliberate
+  // look-alike, became a real profile URL pointing at someone else.
+  assert.equal(normalizeProfileUrl('https://evil-linkedin.com/in/mario-rossi/'), null);
+  assert.equal(normalizeProfileUrl('https://notlinkedin.com/in/mario-rossi/'), null);
+  assert.equal(normalizeProfileUrl('https://linkedin.com.attacker.test/in/mario-rossi/'), null);
+});
+
+test('real LinkedIn subdomains are still accepted', () => {
+  assert.equal(normalizeProfileUrl('https://www.linkedin.com/in/mario-rossi/')?.url,
+    'https://www.linkedin.com/in/mario-rossi/');
+  assert.equal(normalizeProfileUrl('https://it.linkedin.com/in/mario-rossi/')?.url,
+    'https://www.linkedin.com/in/mario-rossi/');
+  assert.equal(normalizeProfileUrl('https://linkedin.com/in/mario-rossi/')?.url,
+    'https://www.linkedin.com/in/mario-rossi/');
+});
+
 test('recognizes Italian headers and puts the extra columns into custom', () => {
   const csv = [
     'Profilo,Nome,Cognome,Azienda,Qualifica,Città,Settore',

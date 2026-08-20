@@ -6,13 +6,16 @@
 //  I just imported" without the tool having to hand back thousands
 //  of UUIDs in the result.
 // ============================================================
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import * as repo from '../db/repo.js';
 import { getDb } from '../db/index.js';
 import { parseCsvBuffer } from '../importer/csv.js';
 import type { Contact } from '../types.js';
+
+/** Upper bound for a CSV read from disk. A contact list is never this big. */
+const MAX_CSV_BYTES = 25 * 1024 * 1024;
 
 export interface ContactPreview {
   id: string;
@@ -82,6 +85,22 @@ export function importContacts(opts: {
     content = opts.csvContent;
     source = 'pasted-in-chat';
   } else if (opts.filePath) {
+    // `file_path` arrives from an MCP tool call, i.e. from a model, i.e. from
+    // untrusted input. Refuse anything that is not a regular file, and cap the
+    // size: without this the daemon would happily read a device node or load a
+    // multi-gigabyte file into memory.
+    let st;
+    try {
+      st = statSync(opts.filePath);
+    } catch {
+      throw new Error(`\`file_path\` not readable: ${opts.filePath}`);
+    }
+    if (!st.isFile()) throw new Error('`file_path` must point to a regular file');
+    if (st.size > MAX_CSV_BYTES) {
+      throw new Error(
+        `CSV too large: ${Math.round(st.size / 1024 / 1024)} MB, the limit is ${MAX_CSV_BYTES / 1024 / 1024} MB`,
+      );
+    }
     content = readFileSync(opts.filePath, 'utf8');
     source = basename(opts.filePath);
   } else {
