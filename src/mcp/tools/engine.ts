@@ -89,7 +89,10 @@ export function registerEngineTools(server: MCPServer, engine: Engine): void {
         action: z.enum(['start', 'stop', 'pause', 'resume', 'clear_halt']),
       }),
       outputSchema: engineStatusSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // destructiveHint: "start" fa partire invii reali a persone reali.
+      // Ritirare un invito non lo annulla: LinkedIn impedisce di reinvitare
+      // la stessa persona per ~3 settimane. Il client deve chiedere conferma.
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     },
     async ({ action }) => {
       try {

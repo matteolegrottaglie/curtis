@@ -59,7 +59,14 @@ export function registerQuickstartTools(server: MCPServer, engine: Engine): void
         working_window: z.string(),
         next_steps: z.string(),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      // Manda inviti veri, e chiamarlo due volte crea due campagne sugli
+      // stessi contatti: entrambe le cose vanno segnalate al client.
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
     },
     async (input) => {
       try {
