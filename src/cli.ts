@@ -19,7 +19,7 @@ import {
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
-import { appConfig, ensureDataDir, getAuthToken, mcpUrl, paths } from './config.js';
+import { appConfig, dataDirPermissionProblem, ensureDataDir, getAuthToken, mcpUrl, paths } from './config.js';
 import { VERSION } from './version.js';
 import { installService, isServiceInstalled, servicePath, uninstallService } from './platform/service.js';
 
@@ -192,6 +192,12 @@ async function cmdDaemonStart(): Promise<void> {
     stdio: ['ignore', out, out],
     env: process.env,
   });
+  // Same reason as in KeepAwake: a spawn that fails emits 'error', and with no
+  // listener Node turns that into an unhandled-error crash — here on top of the
+  // "did the daemon come up?" loop below, which would never get to report.
+  child.on('error', (e) => {
+    console.error(red(`Could not start the daemon process: ${String(e)}`));
+  });
   child.unref();
 
   for (let i = 0; i < 40; i++) {
@@ -333,7 +339,15 @@ async function cmdDoctor(): Promise<void> {
 
   try {
     ensureDataDir();
-    checks.push({ label: 'Data directory', ok: true, detail: appConfig.dataDir });
+    // ensureDataDir() tries to chmod 0700 but cannot always succeed, and it
+    // does not throw when it fails. Report what is actually on disk: a "✓" on
+    // a world-readable data directory is worse than no check at all.
+    const permProblem = dataDirPermissionProblem();
+    checks.push({
+      label: 'Data directory',
+      ok: permProblem === null,
+      detail: permProblem ?? `${appConfig.dataDir} (0700, owner only)`,
+    });
   } catch (e) {
     checks.push({ label: 'Data directory', ok: false, detail: String(e) });
   }

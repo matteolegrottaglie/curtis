@@ -116,6 +116,60 @@ export const paths = {
   accepted: join(DATA_DIR, 'terms-accepted'),
 } as const;
 
+const octal = (mode: number): string => `0${(mode & 0o7777).toString(8).padStart(3, '0')}`;
+
+/**
+ * chmods a directory to 0700 if it currently grants anything to group or other.
+ *
+ * `mkdirSync`'s `mode` only applies to directories it actually *creates*: on an
+ * install made by an earlier version the directory is already there, and the
+ * mode argument is silently ignored. So existing ones have to be chmod'd.
+ *
+ * Tightening is announced, because `LKSQ_DATA_DIR` can point at a pre-existing
+ * directory of the user's choosing and changing its permissions behind their
+ * back would be rude.
+ */
+function tightenDir(dir: string): void {
+  let before: number;
+  try {
+    before = statSync(dir).mode & 0o7777;
+  } catch {
+    return; // does not exist / not reachable: nothing to tighten
+  }
+  if ((before & 0o077) === 0) return;
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // reported by dataDirPermissionProblem(); never fatal on its own
+    return;
+  }
+  warn(`permissions on ${dir} tightened from ${octal(before)} to 0700 (it holds your LinkedIn session)`);
+}
+
+/**
+ * Whether the data directory still lets other local users in, and why.
+ *
+ * The files inside are created with the process umask — `sequencer.db` and
+ * `daemon.log` land at 0644 — so 0700 on the directory is the *only* thing
+ * keeping them private: without execute permission on the directory no other
+ * user can resolve a name inside it, whatever the file's own mode says. If the
+ * chmod did not take (directory owned by someone else, immutable flag, exFAT /
+ * SMB volume with no POSIX modes) that protection is simply absent, and the
+ * user has to be told rather than reassured.
+ */
+export function dataDirPermissionProblem(): string | null {
+  let mode: number;
+  try {
+    mode = statSync(DATA_DIR).mode & 0o7777;
+  } catch (e) {
+    return `cannot read the permissions of ${DATA_DIR}: ${String(e)}`;
+  }
+  if ((mode & 0o077) === 0) return null;
+  return `${DATA_DIR} is ${octal(mode)}, not 0700: every other user on this machine can read the LinkedIn session (a password equivalent), the contact database and the screenshots. Fix it with: chmod -R go-rwx "${DATA_DIR}"`;
+}
+
+let warnedAboutPermissions = false;
+
 /**
  * Creates the data directory, owner-only.
  *
@@ -126,10 +180,29 @@ export const paths = {
  */
 export function ensureDataDir(): void {
   mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  tightenDir(DATA_DIR);
+  // Sub-directories made by an older version kept the default 0755. They are
+  // shielded by the 0700 on the parent, but only for as long as that holds —
+  // tighten them too instead of relying on a single gate.
+  tightenDir(paths.browserProfile);
+  tightenDir(paths.screenshots);
+
+  const problem = dataDirPermissionProblem();
+  if (problem && !warnedAboutPermissions) {
+    warnedAboutPermissions = true;
+    warn(problem);
+  }
+}
+
+/**
+ * stderr directly, not the pino logger: config.ts is imported before logging is
+ * configured, and this has to be visible even when the daemon is being spawned.
+ */
+function warn(msg: string): void {
   try {
-    if ((statSync(DATA_DIR).mode & 0o077) !== 0) chmodSync(DATA_DIR, 0o700);
+    process.stderr.write(`[lksq] WARNING: ${msg}\n`);
   } catch {
-    // read-only or exotic filesystem: the directory exists, carry on
+    // stderr closed (detached daemon): nothing sensible left to do
   }
 }
 

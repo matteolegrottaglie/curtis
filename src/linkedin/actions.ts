@@ -113,7 +113,10 @@ export async function sendConnectionRequest(
   const probe = await probeWithMoreMenu(p, tokens, 20_000);
 
   if (probe.kind === 'pending') {
-    return { status: 'skipped', detail: `invite already pending ("${probe.labels.pending}")` };
+    // sanitizeForLog, not the raw label: this string lands in `detail`, which
+    // get_recent_actions puts straight into a model's context. The label itself
+    // is page-controlled — the name in it is whatever the profile owner typed.
+    return { status: 'skipped', detail: `invite already pending ("${S.sanitizeForLog(probe.labels.pending)}")` };
   }
   if (probe.kind === 'none') {
     const shot = await session.screenshot('connect-not-found');
@@ -166,7 +169,7 @@ export async function sendConnectionRequest(
   if (after.kind === 'pending') {
     return {
       status: 'success',
-      detail: `${opts.sendNote && opts.note ? 'invite sent with a note' : 'invite sent without a note'} — CONFIRMED ("${after.labels.pending}")`,
+      detail: `${opts.sendNote && opts.note ? 'invite sent with a note' : 'invite sent without a note'} — CONFIRMED ("${S.sanitizeForLog(after.labels.pending)}")`,
     };
   }
 

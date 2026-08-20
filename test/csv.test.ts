@@ -44,6 +44,39 @@ test('a look-alike host is not LinkedIn', () => {
   assert.equal(normalizeProfileUrl('https://evil-linkedin.com/in/mario-rossi/'), null);
   assert.equal(normalizeProfileUrl('https://notlinkedin.com/in/mario-rossi/'), null);
   assert.equal(normalizeProfileUrl('https://linkedin.com.attacker.test/in/mario-rossi/'), null);
+  // The host check reads u.hostname, so userinfo before the "@" is not the
+  // host — but only because new URL() parses it away. Pin that: a hand-rolled
+  // string check on the raw URL would read "linkedin.com" here and be wrong.
+  assert.equal(normalizeProfileUrl('https://linkedin.com@evil.test/in/mario-rossi/'), null);
+  assert.equal(normalizeProfileUrl('http://linkedin.com:8080@evil.test/in/mario-rossi/'), null);
+  // Tab/newline are stripped by the URL parser rather than splitting the host,
+  // which is exactly how the old unanchored regex could be walked past.
+  assert.equal(normalizeProfileUrl('https://evil.com\nlinkedin.com/in/mario-rossi/'), null);
+  // IDN: "。" (U+3002) is mapped to "." by IDNA, so the label boundaries the
+  // regex sees are the ones DNS will see, not the ones in the source text.
+  assert.equal(normalizeProfileUrl('https://linkedin.com。evil.test/in/mario-rossi/'), null);
+  // Homoglyph: "ı" (dotless i) punycodes to a different domain entirely.
+  assert.equal(normalizeProfileUrl('https://liınkedin.com/in/mario-rossi/'), null);
+});
+
+test('a malformed percent-escape invalidates one row, it does not kill the import', () => {
+  // new URL() does not validate percent-escapes, so "%ZZ" reaches
+  // decodeURIComponent and used to throw a URIError right out of
+  // parseCsvBuffer — discarding every valid row in the file with it.
+  assert.equal(normalizeProfileUrl('https://www.linkedin.com/in/mario%ZZrossi/'), null);
+  assert.equal(normalizeProfileUrl('https://www.linkedin.com/in/%E0%A4%A/'), null);
+
+  const csv = [
+    'profile_url,nome',
+    'https://www.linkedin.com/in/mario-rossi/,Mario',
+    'https://www.linkedin.com/in/giulia%ZZbianchi/,Giulia',
+    'https://www.linkedin.com/in/luca-verdi/,Luca',
+  ].join('\n');
+  const r = parseCsvBuffer(csv, 't.csv');
+  assert.equal(r.total, 3);
+  assert.equal(r.valid.length, 2);
+  assert.deepEqual(r.valid.map((c) => c.public_id), ['mario-rossi', 'luca-verdi']);
+  assert.deepEqual(r.invalid, [{ row: 3, reason: 'Missing or invalid LinkedIn profile URL' }]);
 });
 
 test('real LinkedIn subdomains are still accepted', () => {

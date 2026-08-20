@@ -78,7 +78,19 @@ export function normalizeProfileUrl(
   if (!/^(?:[a-z0-9-]+\.)*linkedin\.com$/i.test(u.hostname)) return null;
 
   const m = u.pathname.match(/\/in\/([^/]+)/i);
-  const publicId = m && m[1] ? decodeURIComponent(m[1]) : null;
+  // decodeURIComponent throws URIError on a stray "%" ("mario%ZZ", a truncated
+  // "%E0%A4"). new URL() does not validate percent-escapes, so that garbage
+  // reaches here straight from a CSV cell. Uncaught it escapes parseCsvBuffer
+  // and kills the entire import — every good row in the file included. A slug
+  // that is not decodable is simply an invalid URL: report the row instead.
+  let publicId: string | null = null;
+  if (m && m[1]) {
+    try {
+      publicId = decodeURIComponent(m[1]);
+    } catch {
+      return null;
+    }
+  }
   // canonical URL, without query/fragment
   const path = publicId ? `/in/${encodeURIComponent(publicId)}/` : u.pathname;
   const url = `https://www.linkedin.com${path}`;

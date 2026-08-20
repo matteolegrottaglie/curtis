@@ -6,7 +6,7 @@
 //  I just imported" without the tool having to hand back thousands
 //  of UUIDs in the result.
 // ============================================================
-import { readFileSync, statSync } from 'node:fs';
+import { openSync, closeSync, fstatSync, readSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import * as repo from '../db/repo.js';
@@ -14,8 +14,63 @@ import { getDb } from '../db/index.js';
 import { parseCsvBuffer } from '../importer/csv.js';
 import type { Contact } from '../types.js';
 
-/** Upper bound for a CSV read from disk. A contact list is never this big. */
+/** Upper bound for a CSV, from disk or pasted. A contact list is never this big. */
 const MAX_CSV_BYTES = 25 * 1024 * 1024;
+const MAX_CSV_MB = MAX_CSV_BYTES / 1024 / 1024;
+
+function tooLarge(): Error {
+  return new Error(`CSV too large: the limit is ${MAX_CSV_MB} MB`);
+}
+
+/**
+ * Reads a CSV from disk with a hard ceiling on the bytes actually read.
+ *
+ * The path comes from an MCP tool call, i.e. from a model, i.e. from untrusted
+ * input. Two separate checks:
+ *
+ *  - `statSync` before opening, so a FIFO or a device node is refused *without*
+ *    being opened (opening a FIFO for reading blocks until a writer shows up,
+ *    which would hang the daemon).
+ *  - the read loop counts bytes instead of trusting `st.size`. A stat size is a
+ *    hint, not a promise: /proc and /sys entries on Linux are regular files that
+ *    report 0 and still yield unbounded data, and Node's own readFileSync
+ *    comments that "the kernel lies about many files". `fstatSync` on the open
+ *    descriptor re-checks the file type, so the answer describes the bytes being
+ *    read rather than whatever the path pointed at a moment earlier.
+ */
+function readCsvFile(filePath: string): string {
+  let pre;
+  try {
+    pre = statSync(filePath);
+  } catch {
+    throw new Error(`\`file_path\` not readable: ${filePath}`);
+  }
+  if (!pre.isFile()) throw new Error('`file_path` must point to a regular file');
+  if (pre.size > MAX_CSV_BYTES) throw tooLarge();
+
+  let fd: number;
+  try {
+    fd = openSync(filePath, 'r');
+  } catch {
+    throw new Error(`\`file_path\` not readable: ${filePath}`);
+  }
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error('`file_path` must point to a regular file');
+    const chunks: Buffer[] = [];
+    const buf = Buffer.allocUnsafe(1 << 20);
+    let total = 0;
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, null);
+      if (n === 0) break;
+      total += n;
+      if (total > MAX_CSV_BYTES) throw tooLarge();
+      chunks.push(Buffer.from(buf.subarray(0, n)));
+    }
+    return Buffer.concat(chunks, total).toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
+}
 
 export interface ContactPreview {
   id: string;
@@ -82,26 +137,14 @@ export function importContacts(opts: {
   let content: string;
   let source: string;
   if (opts.csvContent && opts.csvContent.trim()) {
+    // Same budget as the on-disk branch. `csv_content` reaches the daemon over
+    // the same tool call, so capping only `file_path` would just move the
+    // memory blow-up one argument to the left.
+    if (Buffer.byteLength(opts.csvContent, 'utf8') > MAX_CSV_BYTES) throw tooLarge();
     content = opts.csvContent;
     source = 'pasted-in-chat';
   } else if (opts.filePath) {
-    // `file_path` arrives from an MCP tool call, i.e. from a model, i.e. from
-    // untrusted input. Refuse anything that is not a regular file, and cap the
-    // size: without this the daemon would happily read a device node or load a
-    // multi-gigabyte file into memory.
-    let st;
-    try {
-      st = statSync(opts.filePath);
-    } catch {
-      throw new Error(`\`file_path\` not readable: ${opts.filePath}`);
-    }
-    if (!st.isFile()) throw new Error('`file_path` must point to a regular file');
-    if (st.size > MAX_CSV_BYTES) {
-      throw new Error(
-        `CSV too large: ${Math.round(st.size / 1024 / 1024)} MB, the limit is ${MAX_CSV_BYTES / 1024 / 1024} MB`,
-      );
-    }
-    content = readFileSync(opts.filePath, 'utf8');
+    content = readCsvFile(opts.filePath);
     source = basename(opts.filePath);
   } else {
     throw new Error('`file_path` or `csv_content` is required');

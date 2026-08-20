@@ -181,20 +181,25 @@ export async function probeTopCard(page: Page, tokens: string[], timeoutMs = 15_
             connected: connected?.raw,
             // `sample` is page-controlled text that ends up in tool output and
             // therefore in a model's context. Collapse whitespace, drop control
-            // characters and cap the length, so a hostile profile cannot smuggle
-            // a multi-line instruction block through an aria-label.
-            // NOTE: only `sample` is sanitised. The `labels.*` above are passed
-            // verbatim to byExactLabel() to click, and MUST stay byte-exact.
+            // AND Unicode format characters, then cap the length, so a hostile
+            // profile cannot smuggle a multi-line instruction block through an
+            // aria-label. \p{Cf} matters as much as the C0/C1 range: it covers
+            // the bidi overrides U+202A-U+202E and the invisible tag block
+            // U+E0000-U+E007F, which a model reads but a human auditing the log
+            // never sees.
+            // NOTE: the `labels.*` above stay byte-exact — byExactLabel() clicks
+            // with them. Sanitising a label for the LOG is the caller's job, via
+            // sanitizeForLog(); a sanitised label must never be used as a selector.
             sample: items
               .filter((i) => rxInteresting.test(i.norm))
+              .slice(0, 10)
               .map((i) =>
                 i.raw
-                  .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+                  .replace(/[\u0000-\u001f\u007f-\u009f]|\p{Cf}/gu, ' ')
                   .replace(/\s+/g, ' ')
                   .trim()
                   .slice(0, 120),
-              )
-              .slice(0, 10),
+              ),
           };
         },
         { toks: tokens, rx: patterns },
@@ -222,9 +227,42 @@ export async function probeTopCard(page: Page, tokens: string[], timeoutMs = 15_
   return last;
 }
 
-/** Locator by EXACT aria-label — the only safe way to re-grab what the probe found. */
+/**
+ * Sanitises a raw aria-label for a LOG line.
+ *
+ * `labels.*` come off the page byte-exact because byExactLabel() clicks with
+ * them — but they also get interpolated into the `detail` of an action, which
+ * `get_recent_actions` hands to a model. That is the same prompt-injection path
+ * `sample` is sanitised against, so anything page-controlled must go through
+ * here before it is written into a detail string.
+ *
+ * NEVER feed the result back to byExactLabel(): it is lossy on purpose.
+ */
+export function sanitizeForLog(label: string | undefined | null, max = 120): string {
+  if (!label) return '';
+  return label
+    .replace(/[\u0000-\u001f\u007f-\u009f]|\p{Cf}/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
+/**
+ * Locator by EXACT aria-label — the only safe way to re-grab what the probe found.
+ *
+ * A CSS string cannot hold a raw newline/CR/FF: with one in the label the
+ * selector is a BADSTRING and Playwright throws instead of just not matching,
+ * which turns a weird profile name into a hard failure of connect / message /
+ * follow / withdraw. They are emitted as CSS escapes (`\A ` etc.), which denote
+ * the very same characters, so the match stays exact.
+ */
 export function byExactLabel(page: Page, label: string): Locator {
-  return page.locator(`[aria-label="${label.replace(/["\\]/g, '\\$&')}"]`).first();
+  const css = label
+    .replace(/["\\]/g, '\\$&')
+    .replace(/\n/g, '\\A ')
+    .replace(/\r/g, '\\D ')
+    .replace(/\f/g, '\\C ');
+  return page.locator(`[aria-label="${css}"]`).first();
 }
 
 // ============================================================
