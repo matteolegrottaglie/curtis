@@ -58,10 +58,37 @@ export async function humanScroll(page: Page, steps = randInt(2, 5)): Promise<vo
   }
 }
 
-/** Hover + micro-pausa + click (più umano del click secco). */
+/**
+ * Hover + micro-pausa + click (più umano del click secco), con
+ * fallback che dispatcha il click sull'ELEMENTO invece che sulle
+ * coordinate.
+ *
+ * Perché: la top-nav sticky di LinkedIn (es. il banner "Claim Premium
+ * Page for €0") intercetta i pointer event quando il bersaglio resta
+ * sotto l'header. Per questo si centra prima l'elemento nel viewport
+ * con scrollIntoView({ block: 'center' }) — scrollIntoViewIfNeeded()
+ * non basta, lascia il bersaglio proprio sotto la barra.
+ *
+ * MAI click({ force: true }): force clicca alle COORDINATE, quindi con
+ * la top-nav sovrapposta colpisce il banner e porta alla pagina di
+ * checkout Premium (successo davvero in test, 2026-08-20). Il fallback
+ * qui usa el.click(): niente coordinate, niente elemento sbagliato.
+ * Il bersaglio può essere un <div aria-label> dentro un
+ * <a role="menuitem">, quindi si clicca l'antenato interattivo.
+ */
 export async function humanClick(locator: Locator): Promise<void> {
-  await locator.scrollIntoViewIfNeeded().catch(() => {});
+  await locator
+    .evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' }))
+    .catch(() => {});
+  await shortPause(400, 1100);
   await locator.hover().catch(() => {});
-  await shortPause(200, 800);
-  await locator.click();
+  await shortPause(200, 700);
+  try {
+    await locator.click({ timeout: 8000 });
+  } catch {
+    await locator.evaluate((el) => {
+      const target = (el as HTMLElement).closest('a,button,[role="menuitem"]') ?? el;
+      (target as HTMLElement).click();
+    });
+  }
 }

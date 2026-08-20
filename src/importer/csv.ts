@@ -41,18 +41,30 @@ function buildHeaderMap(headers: string[]): Record<string, string> {
   return map;
 }
 
-/** Normalizza un URL profilo LinkedIn. Ritorna null se non valido/non riconducibile. */
-export function normalizeProfileUrl(raw: string): { url: string; publicId: string | null } | null {
+/**
+ * Normalizza un URL profilo LinkedIn. Ritorna null se non valido/non riconducibile.
+ *
+ * `inferred` segnala che l'input era uno *slug nudo* ("mario-rossi") e non un URL:
+ * qualunque parola con soli caratteri da slug diventa un URL sintatticamente valido,
+ * quindi un refuso in una colonna sbagliata passerebbe silenziosamente come profilo.
+ * Chi importa deve poterlo sapere.
+ */
+export function normalizeProfileUrl(
+  raw: string,
+): { url: string; publicId: string | null; inferred: boolean } | null {
   if (!raw) return null;
   let s = raw.trim();
   if (!s) return null;
 
+  let inferred = false;
   // slug nudo tipo "in/mario-rossi" o "mario-rossi"
   if (!/^https?:\/\//i.test(s)) {
     s = s.replace(/^\/+/, '');
     if (s.startsWith('in/')) s = `https://www.linkedin.com/${s}`;
-    else if (/^[a-z0-9\-_%]+$/i.test(s)) s = `https://www.linkedin.com/in/${s}`;
-    else s = `https://${s}`;
+    else if (/^[a-z0-9\-_%]+$/i.test(s)) {
+      s = `https://www.linkedin.com/in/${s}`;
+      inferred = true;
+    } else s = `https://${s}`;
   }
 
   let u: URL;
@@ -68,13 +80,15 @@ export function normalizeProfileUrl(raw: string): { url: string; publicId: strin
   // URL canonico, senza query/fragment
   const path = publicId ? `/in/${encodeURIComponent(publicId)}/` : u.pathname;
   const url = `https://www.linkedin.com${path}`;
-  return { url, publicId };
+  return { url, publicId, inferred };
 }
 
 export interface ImportResult {
   total: number;
   valid: ContactInput[];
   invalid: { row: number; reason: string }[];
+  /** Righe in cui l'URL è stato ricostruito da uno slug nudo: da verificare. */
+  inferred: { row: number; input: string; url: string }[];
 }
 
 export function parseCsvBuffer(content: string, source: string): ImportResult {
@@ -91,6 +105,7 @@ export function parseCsvBuffer(content: string, source: string): ImportResult {
 
   const valid: ContactInput[] = [];
   const invalid: { row: number; reason: string }[] = [];
+  const inferred: { row: number; input: string; url: string }[] = [];
 
   records.forEach((rec, i) => {
     const canon: Record<string, string> = {};
@@ -101,11 +116,13 @@ export function parseCsvBuffer(content: string, source: string): ImportResult {
       else if (val && val.trim()) custom[orig.trim()] = val.trim();
     }
 
-    const norm = normalizeProfileUrl(canon.profile_url ?? '');
+    const rawUrl = canon.profile_url ?? '';
+    const norm = normalizeProfileUrl(rawUrl);
     if (!norm) {
       invalid.push({ row: i + 2, reason: 'URL profilo LinkedIn mancante o non valido' });
       return;
     }
+    if (norm.inferred) inferred.push({ row: i + 2, input: rawUrl.trim(), url: norm.url });
 
     valid.push({
       profile_url: norm.url,
@@ -122,7 +139,7 @@ export function parseCsvBuffer(content: string, source: string): ImportResult {
     });
   });
 
-  return { total: records.length, valid, invalid };
+  return { total: records.length, valid, invalid, inferred };
 }
 
 export function parseCsvFile(path: string, source: string): ImportResult {

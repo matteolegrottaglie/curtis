@@ -3,8 +3,10 @@ node_modules/
 
 # Build
 dist/
+*.tsbuildinfo
 
-# Dati locali: database, profilo browser (sessione LinkedIn), CSV caricati, screenshot
+# Dati locali dell'utente: database, profilo browser (sessione LinkedIn), token,
+# screenshot, log. NON deve mai finire in git.
 data/
 
 # Ambiente
@@ -16,5 +18,9 @@ data/
 # macOS
 .DS_Store
 
-# Claude Code: impostazioni locali per-macchina (launch.json invece resta tracciato)
+# Claude Code: impostazioni locali per-macchina e worktree temporanei
 .claude/settings.local.json
+.claude/worktrees/
+
+# File di lavoro generati da mcp-use
+.mcp-use/

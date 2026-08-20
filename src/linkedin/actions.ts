@@ -6,9 +6,16 @@
 //   - su segnale di LinkedIn ritorna 'blocked' + signal (il controller
 //     deciderà backoff/halt)
 //
-//  ATTENZIONE: i selettori (selectors.ts) sono il punto fragile.
-//  Validali alla prima esecuzione reale guardando gli screenshot in
-//  data/screenshots quando un'azione fallisce.
+//  RISCRITTO il 2026-08-20 sopra i selettori per aria-label ancorati
+//  al nome (vedi selectors.ts). Implementazione di riferimento e
+//  verificata sul campo: scripts/connect-no-note.ts.
+//
+//  DUE INVARIANTI DI SICUREZZA, non toglierle:
+//   1. Nessuna azione se non si riesce ad ancorare l'aria-label al
+//      nome del contatto: altrimenti si clicca il "Connect" di un
+//      profilo della sidebar "More profiles for you".
+//   2. Dopo ogni click si controlla di non essere finiti su
+//      Premium/checkout (RX.offProfileUrl): ci si ferma e basta.
 // ============================================================
 import type { ActionResult, Contact } from '../types.js';
 import type { LinkedInSession } from '../browser/session.js';
@@ -34,6 +41,52 @@ async function open(session: LinkedInSession, url: string): Promise<ActionResult
 
 const vis = (loc: ReturnType<Page['locator']>, t = 2000) => loc.isVisible({ timeout: t }).catch(() => false);
 
+/**
+ * Il click ci ha portati fuori dal profilo (upsell Premium/checkout)?
+ * Se sì ci si ferma: non si tocca più nulla su quella pagina.
+ */
+function strayedOffProfile(p: Page): ActionResult | null {
+  const url = p.url();
+  if (!S.RX.offProfileUrl.test(url)) return null;
+  return { status: 'failed', detail: `finito su pagina Premium/checkout (${url}) — mi fermo, nessuna altra azione` };
+}
+
+/** Senza token del nome non si clicca niente: vedi invariante 1. */
+function unanchored(contact: Contact, what: string): ActionResult {
+  return {
+    status: 'failed',
+    detail: `impossibile ancorare "${what}" al nome di ${contact.profile_url}: senza nome utilizzabile rischierei di cliccare il controllo di un altro profilo (sidebar) — nessuna azione`,
+  };
+}
+
+/** Apre il menu "Altro" della top-card. Alcuni profili tengono "Collegati" solo lì. */
+async function openMoreMenu(p: Page): Promise<boolean> {
+  const more = S.moreButton(p);
+  if (!(await vis(more, 3000))) return false;
+  await H.humanClick(more);
+  await H.shortPause(1200, 2200);
+  return true;
+}
+
+/**
+ * Probe della top-card, con fallback dentro il menu "Altro".
+ * I label dei due probe vengono FUSI: nella top-card si vede
+ * "Message/Follow", nel menu compare "Remove your connection" — la
+ * diagnostica di un fallimento le vuole tutte e due.
+ */
+async function probeWithMoreMenu(p: Page, tokens: string[], timeoutMs = 15_000): Promise<S.TopCardProbe> {
+  const probe = await S.probeTopCard(p, tokens, timeoutMs);
+  if (probe.kind !== 'none') return probe;
+  if (!(await openMoreMenu(p))) return probe;
+  const inMenu = await S.probeTopCard(p, tokens, 10_000);
+  return {
+    kind: inMenu.kind, // probe.kind qui è per forza 'none'
+    label: inMenu.label,
+    labels: { ...probe.labels, ...inMenu.labels },
+    sample: inMenu.sample.length > 0 ? inMenu.sample : probe.sample,
+  };
+}
+
 // ---------------- VISIT ----------------
 export async function visitProfile(session: LinkedInSession, contact: Contact): Promise<ActionResult> {
   const blocked = await open(session, contact.profile_url);
@@ -50,41 +103,36 @@ export async function sendConnectionRequest(
   opts: { note?: string; sendNote: boolean },
 ): Promise<ActionResult> {
   const p = page(session);
+  const tokens = S.tokensForContact(contact);
+  if (tokens.length === 0) return unanchored(contact, 'Collegati');
+
   const blocked = await open(session, contact.profile_url);
   if (blocked) return blocked;
-  await H.humanScroll(p, randInt(1, 3));
-  await H.readingPause();
+  await H.humanScroll(p, randInt(1, 2));
 
-  if (await vis(S.pendingButton(p), 1500)) return { status: 'skipped', detail: 'invito già pendente' };
+  const probe = await probeWithMoreMenu(p, tokens, 20_000);
 
-  let connect = S.topCardConnect(p).first();
-  let have = await vis(connect, 2500);
-  if (!have) {
-    const more = S.moreButton(p);
-    if (await vis(more, 2000)) {
-      await H.humanClick(more);
-      await H.shortPause(500, 1400);
-      const item = p
-        .getByRole('menuitem', { name: S.RX.connectMenuItem })
-        .first()
-        .or(p.getByRole('button', { name: S.RX.connectMenuItem }).first());
-      if (await vis(item, 2000)) {
-        connect = item;
-        have = true;
-      }
-    }
+  if (probe.kind === 'pending') {
+    return { status: 'skipped', detail: `invito già pendente ("${probe.labels.pending}")` };
   }
-  if (!have) {
+  if (probe.kind === 'none') {
     const shot = await session.screenshot('connect-not-found');
     return {
       status: 'failed',
-      detail: 'bottone "Collegati" non trovato (già 1° grado? profilo fuori rete?)',
+      detail:
+        `nessun "Invite … to connect" per [${tokens.join(' ')}] né in top-card né nel menu "Altro"` +
+        (probe.labels.connected ? ' — sembra già un collegamento di 1° grado' : '') +
+        `; aria-label viste: ${JSON.stringify(probe.sample)}`,
       screenshot: shot,
     };
   }
 
-  await H.humanClick(connect);
-  await H.shortPause(900, 2200);
+  await H.readingPause();
+  await H.humanClick(S.byExactLabel(p, probe.label!));
+  await H.shortPause(1500, 2800);
+
+  const strayed = strayedOffProfile(p);
+  if (strayed) return strayed;
 
   if (await inviteLimitModalOpen(p)) {
     return {
@@ -96,48 +144,70 @@ export async function sendConnectionRequest(
   const sig = await detectGuards(p);
   if (sig) return { status: 'blocked', signal: sig, detail: sig.detail };
 
-  const dialog = p.getByRole('dialog');
-  if (await vis(dialog, 2500)) {
-    if (opts.sendNote && opts.note && (await vis(S.addNoteButton(p), 1500))) {
-      await H.humanClick(S.addNoteButton(p));
-      await H.shortPause(500, 1200);
-      await H.humanType(p, S.noteTextarea(p), opts.note);
-      await H.shortPause(400, 1100);
-      await H.humanClick(S.sendInvitationButton(p).first());
-    } else if (await vis(S.sendWithoutNoteButton(p), 1500)) {
-      await H.humanClick(S.sendWithoutNoteButton(p).first());
-    } else {
-      await H.humanClick(S.sendInvitationButton(p).first());
-    }
-    await H.shortPause(900, 2000);
+  // --- modale invito: con nota solo se richiesto, altrimenti SENZA ---
+  if (opts.sendNote && opts.note && (await vis(S.addNoteControl(p), 2000))) {
+    await H.humanClick(S.addNoteControl(p));
+    await H.shortPause(500, 1200);
+    await H.humanType(p, S.noteTextarea(p), opts.note);
+    await H.shortPause(400, 1100);
+    await H.humanClick(S.sendInviteControl(p));
+  } else if (await vis(S.sendWithoutNoteControl(p), 6000)) {
+    await H.humanClick(S.sendWithoutNoteControl(p));
+  } else if (await vis(S.sendInviteControl(p), 3000)) {
+    await H.humanClick(S.sendInviteControl(p));
   }
+  await H.shortPause(1500, 3000);
 
   const sig2 = await detectGuards(p);
   if (sig2) return { status: 'blocked', signal: sig2, detail: sig2.detail };
 
+  // --- verifica reale: per questa persona deve comparire "Pending" ---
+  const after = await S.probeTopCard(p, tokens, 15_000);
+  if (after.kind === 'pending') {
+    return {
+      status: 'success',
+      detail: `${opts.sendNote && opts.note ? 'invito inviato con nota' : 'invito inviato senza nota'} — CONFERMATO ("${after.labels.pending}")`,
+    };
+  }
+
+  // Non confermato: si ritorna 'failed' apposta. Al retry il probe
+  // rivede lo stato: se l'invito era passato trova "Pending" e la
+  // richiesta viene saltata, quindi non si manda nulla due volte.
+  const shot = await session.screenshot('connect-unconfirmed');
   return {
-    status: 'success',
-    detail: opts.sendNote && opts.note ? 'invito inviato con nota' : 'invito inviato senza nota',
+    status: 'failed',
+    detail: `cliccato ma "Pending" non rilevato per [${tokens.join(' ')}]; aria-label viste: ${JSON.stringify(after.sample)}`,
+    screenshot: shot,
   };
 }
 
 // ---------------- MESSAGE (richiede 1° grado) ----------------
 export async function sendMessage(session: LinkedInSession, contact: Contact, text: string): Promise<ActionResult> {
   const p = page(session);
+  const tokens = S.tokensForContact(contact);
+  if (tokens.length === 0) return unanchored(contact, 'Messaggio');
+
   const blocked = await open(session, contact.profile_url);
   if (blocked) return blocked;
   await H.readingPause();
 
-  const msgBtn = S.messageButton(p);
-  if (!(await vis(msgBtn, 3000))) {
+  const probe = await S.probeTopCard(p, tokens, 15_000);
+  if (!probe.labels.message) {
     const shot = await session.screenshot('message-btn-not-found');
-    return { status: 'failed', detail: 'bottone "Messaggio" non trovato (non sei 1° grado?)', screenshot: shot };
+    return {
+      status: 'failed',
+      detail: `controllo "Messaggio" non trovato per [${tokens.join(' ')}] (non sei 1° grado?); aria-label viste: ${JSON.stringify(probe.sample)}`,
+      screenshot: shot,
+    };
   }
-  await H.humanClick(msgBtn);
+  await H.humanClick(S.byExactLabel(p, probe.labels.message));
   await H.shortPause(1200, 2600);
 
+  const strayed = strayedOffProfile(p);
+  if (strayed) return strayed;
+
   const editor = S.messageEditor(p);
-  if (!(await vis(editor, 4000))) {
+  if (!(await vis(editor, 5000))) {
     const shot = await session.screenshot('message-editor-not-found');
     return { status: 'failed', detail: 'editor messaggio non trovato', screenshot: shot };
   }
@@ -145,9 +215,11 @@ export async function sendMessage(session: LinkedInSession, contact: Contact, te
   await H.shortPause(700, 1700);
 
   const send = S.messageSendButton(p);
-  if (await send.isEnabled().catch(() => false)) {
+  if (await vis(send, 3000)) {
     await H.humanClick(send);
     await H.shortPause(800, 1800);
+    const sig = await detectGuards(p);
+    if (sig) return { status: 'blocked', signal: sig, detail: sig.detail };
     return { status: 'success', detail: 'messaggio inviato' };
   }
   const shot = await session.screenshot('message-send-disabled');
@@ -157,25 +229,30 @@ export async function sendMessage(session: LinkedInSession, contact: Contact, te
 // ---------------- FOLLOW ----------------
 export async function followProfile(session: LinkedInSession, contact: Contact): Promise<ActionResult> {
   const p = page(session);
+  const tokens = S.tokensForContact(contact);
+  if (tokens.length === 0) return unanchored(contact, 'Segui');
+
   const blocked = await open(session, contact.profile_url);
   if (blocked) return blocked;
   await H.readingPause();
 
-  let f = S.followButton(p);
-  if (!(await vis(f, 2000))) {
-    const more = S.moreButton(p);
-    if (await vis(more, 2000)) {
-      await H.humanClick(more);
-      await H.shortPause(500, 1300);
-      const item = p.getByRole('menuitem', { name: S.RX.follow }).first().or(p.getByRole('button', { name: S.RX.follow }).first());
-      if (await vis(item, 2000)) f = item;
-      else return { status: 'skipped', detail: 'pulsante "Segui" non trovato' };
-    } else {
-      return { status: 'skipped', detail: 'pulsante "Segui" non trovato' };
-    }
+  let probe = await S.probeTopCard(p, tokens, 15_000);
+  // "Segui" spesso non è nella top-card: sta nel menu "Altro".
+  if (!probe.labels.follow && (await openMoreMenu(p))) {
+    const inMenu = await S.probeTopCard(p, tokens, 10_000);
+    if (inMenu.labels.follow) probe = inMenu;
   }
-  await H.humanClick(f);
+  if (!probe.labels.follow) {
+    return {
+      status: 'skipped',
+      detail: `controllo "Segui" non trovato per [${tokens.join(' ')}]; aria-label viste: ${JSON.stringify(probe.sample)}`,
+    };
+  }
+
+  await H.humanClick(S.byExactLabel(p, probe.labels.follow));
   await H.shortPause(600, 1500);
+  const strayed = strayedOffProfile(p);
+  if (strayed) return strayed;
   return { status: 'success', detail: 'follow effettuato' };
 }
 
@@ -187,10 +264,12 @@ export async function likeRecentPost(session: LinkedInSession, contact: Contact)
   if (blocked) return blocked;
   await H.humanScroll(p, randInt(1, 3));
 
-  const likeBtn = p.getByRole('button', { name: S.RX.like }).first();
+  const likeBtn = S.likeControl(p);
   if (!(await vis(likeBtn, 2500))) return { status: 'skipped', detail: 'nessun post recente da apprezzare' };
   await H.humanClick(likeBtn);
   await H.shortPause(600, 1400);
+  const strayed = strayedOffProfile(p);
+  if (strayed) return strayed;
   return { status: 'success', detail: 'like a post recente' };
 }
 
@@ -198,32 +277,60 @@ export async function likeRecentPost(session: LinkedInSession, contact: Contact)
 /** detail: 'accepted' | 'pending' | 'not_connected' | 'unknown' */
 export async function checkAccepted(session: LinkedInSession, contact: Contact): Promise<ActionResult> {
   const p = page(session);
+  const tokens = S.tokensForContact(contact);
+  if (tokens.length === 0) return { status: 'success', detail: 'unknown' };
+
   const blocked = await open(session, contact.profile_url);
   if (blocked) return blocked;
 
-  if (await vis(S.pendingButton(p), 2000)) return { status: 'success', detail: 'pending' };
-  if (await vis(S.firstDegreeBadge(p), 2500)) return { status: 'success', detail: 'accepted' };
-  if (await vis(S.topCardConnect(p), 2000)) return { status: 'success', detail: 'not_connected' };
+  const probe = await S.probeTopCard(p, tokens, 15_000);
+  if (probe.kind === 'pending') return { status: 'success', detail: 'pending' };
+  if (probe.kind === 'connect') return { status: 'success', detail: 'not_connected' };
+  // Niente invito in ballo e c'è un "Messaggia <Nome>": è un 1° grado.
+  if (probe.labels.message) return { status: 'success', detail: 'accepted' };
+
+  // Ultima parola al menu "Altro": "Collegati" (fuori rete) oppure
+  // "Rimuovi il collegamento" (accettato).
+  if (await openMoreMenu(p)) {
+    const inMenu = await S.probeTopCard(p, tokens, 10_000);
+    if (inMenu.kind === 'pending') return { status: 'success', detail: 'pending' };
+    if (inMenu.kind === 'connect') return { status: 'success', detail: 'not_connected' };
+    if (inMenu.labels.connected || inMenu.labels.message) return { status: 'success', detail: 'accepted' };
+    await p.keyboard.press('Escape').catch(() => {});
+  }
   return { status: 'success', detail: 'unknown' };
 }
 
 // ---------------- WITHDRAW invito pendente ----------------
 export async function withdrawInvite(session: LinkedInSession, contact: Contact): Promise<ActionResult> {
   const p = page(session);
+  const tokens = S.tokensForContact(contact);
+  if (tokens.length === 0) return unanchored(contact, 'Ritira invito');
+
   const blocked = await open(session, contact.profile_url);
   if (blocked) return blocked;
 
-  const pend = S.pendingButton(p);
-  if (!(await vis(pend, 2000))) return { status: 'skipped', detail: 'nessun invito pendente' };
-  await H.humanClick(pend);
-  await H.shortPause(600, 1500);
+  const probe = await S.probeTopCard(p, tokens, 15_000);
+  if (probe.kind !== 'pending') return { status: 'skipped', detail: 'nessun invito pendente' };
 
-  const wd = p.getByRole('dialog').getByRole('button', { name: S.RX.withdraw }).first().or(p.getByRole('button', { name: S.RX.withdraw }).first());
-  if (!(await vis(wd, 2500))) {
+  await H.humanClick(S.byExactLabel(p, probe.labels.pending!));
+  await H.shortPause(600, 1500);
+  const strayed = strayedOffProfile(p);
+  if (strayed) return strayed;
+
+  const confirm = S.withdrawConfirmControl(p);
+  if (!(await vis(confirm, 3000))) {
     const shot = await session.screenshot('withdraw-confirm-not-found');
     return { status: 'failed', detail: 'conferma ritiro non trovata', screenshot: shot };
   }
-  await H.humanClick(wd);
-  await H.shortPause(600, 1400);
+  await H.humanClick(confirm);
+  await H.shortPause(1200, 2200);
+
+  // Verifica reale: "Pending" deve essere sparito.
+  const after = await S.probeTopCard(p, tokens, 10_000);
+  if (after.kind === 'pending') {
+    const shot = await session.screenshot('withdraw-unconfirmed');
+    return { status: 'failed', detail: 'ritiro non confermato: "Pending" ancora presente', screenshot: shot };
+  }
   return { status: 'success', detail: 'invito ritirato' };
 }

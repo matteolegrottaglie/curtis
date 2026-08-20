@@ -1,169 +1,377 @@
-# LinkedIn Sequencer
+# LinkedIn Sequencer MCP
 
-Sequenziatore **personale** di richieste di collegamento e messaggi LinkedIn, in stile Dripify ma
-locale e per un **singolo account** (il tuo). Automatizza il browser con **Playwright** simulando
-comportamento umano. Nessuna API, nessun token, nessuna password salvata: usa la tua sessione
-LinkedIn in un profilo Chrome reale.
+Server **MCP** che automatizza l'outreach su LinkedIn **dal computer dell'utente**, comandato
+interamente da chat dentro Claude Code, Codex o qualunque client MCP.
+
+Accedi una volta a LinkedIn, passi una lista di contatti, e il tool manda le richieste di
+collegamento — lentamente, dentro orari lavorativi, con una rampa di warm-up e un controller
+che frena da solo quando LinkedIn dà segnali di fastidio.
+
+Nessuna API LinkedIn, nessun token, nessuna password: pilota una finestra di **Chrome reale**
+con Playwright, usando la tua sessione e il tuo IP.
+
+```
+tu:      "importa ~/contatti.csv e comincia a mandare le richieste"
+Claude:  → import_contacts → create_campaign → enroll_contacts → engine_control start
+         "Campagna creata: 180 contatti. Fino a 12 inviti oggi, lun–ven 9–18."
+```
 
 ---
 
 ## ⚠️ Leggi prima questo (onestà sui rischi)
 
-- **Automatizzare LinkedIn viola lo User Agreement** (§8.2: vietati "bot o metodi automatizzati per
-  accedere al servizio, aggiungere contatti, inviare messaggi"). La sanzione va dalla restrizione
-  temporanea al **ban permanente** (recupero <15%).
-- **Nessuno può garantirti che non verrai bannato** — nemmeno i tool a pagamento. Questo strumento
-  *riduce* il rischio con volumi bassi e comportamento umano, non lo azzera.
-- I **"75/giorno" pubblicizzati dai tool sono un tetto teorico**: LinkedIn impone ~**100–200 inviti a
-  settimana** lato suo, e li throttla a monte. Il tasso d'invito *sostenibile* è ~100–150/settimana
-  (~15–25/giorno) per un account in salute. Si sale **nel tempo**, guadagnando trust.
-- Usalo in modo responsabile, sul **tuo** account, a tuo rischio.
+- **Automatizzare LinkedIn viola il suo User Agreement** (§8.2: vietati "bot o metodi
+  automatizzati per accedere al servizio, aggiungere contatti, inviare messaggi"). La sanzione
+  va dalla restrizione temporanea al **ban permanente**.
+- **Nessuno può garantirti che non verrai bannato** — nemmeno i tool a pagamento. Questo
+  strumento *riduce* il rischio con volumi bassi e comportamento umano, non lo azzera.
+- ⚠️ **Attenzione ai numeri che girano online.** "100–200 inviti/settimana", "75/giorno",
+  "recupero <15%" sono cifre da blog di vendor di automazione, senza fonte primaria.
+  **LinkedIn non pubblica alcun limite numerico** di inviti, né settimanale né sul totale
+  dei pendenti, e dichiara di non poter mostrare quanto ti resta.
+  Non progettare la tua sicurezza su quei numeri.
 
----
+### Cosa dice davvero LinkedIn (fonti dirette)
 
-## Come fa un tool cloud (Dripify) a reggere i volumi — e come lo replichiamo
+- Tre trigger dichiarati per la restrizione degli inviti: molti inviti in poco tempo; alta quota
+  di inviti ignorati o segnalati come spam; **"using automation tools to send invitations"**
+  ([Help a551012](https://www.linkedin.com/help/linkedin/answer/a551012)).
+- Una restrizione **dura tipicamente una settimana**, LinkedIn **non può accorciarla** e il
+  Supporto non rivela il motivo. Scala fino a **un mese** per troppi inviti pendenti.
+- **Ritirare gli inviti pendenti NON toglie la restrizione**, e dopo un ritiro non puoi
+  reinvitare la stessa persona per **~3 settimane**
+  ([Help a550555](https://www.linkedin.com/help/linkedin/answer/a550555)).
+- Gli account **free** possono allegare una nota personalizzata a soli **5 inviti al mese**
+  (illimitati con Premium). Il tetto è **mensile**, non settimanale.
+- Il limite di rete resta **30.000 collegamenti di 1° grado**.
 
-| Leva di Dripify | Come la replichiamo in locale |
-|---|---|
-| IP dedicato residenziale, geo-coerente | **Il tuo IP residenziale reale** (gira sulla tua macchina): più autentico di un IP affittato |
-| Cloud 24/7 | Gira quando il PC è acceso, **solo in orari lavorativi** (più umano) |
-| "Activity Control" che alza/abbassa i limiti sui segnali | **Adaptive Limit Controller**: backoff sui warning, halt su captcha, recupero graduale |
-| Mix di azioni (visite, follow, like, messaggi) | **Action-mix scheduler** con cap separati per tipo |
-| Delay randomici, niente raffiche | Distribuzione ~gaussiana dei ritardi, pause lunghe, digitazione variabile |
-| Warm-up graduale | **Rampa configurabile** per settimane, gated sull'**acceptance rate** |
+I tetti configurati in questo tool (`weeklyInviteCeiling`, `caps`, rampa) sono **scelte di
+prudenza**, non soglie note di LinkedIn. Il segnale utile da guardare è l'**acceptance rate**,
+non un numero preso da un blog.
 
-La difesa vera è: **volumi bassi + ritmo umano + acceptance rate alto**. Quello fa salire il tuo
-limite dinamico molto più di qualsiasi trucco.
+Usalo in modo responsabile, sul **tuo** account, a tuo rischio.
 
 ---
 
 ## Requisiti
 
-- **Node.js ≥ 20** (testato su 20.19)
+- **Node.js ≥ 22.22.2** (richiesto da `mcp-use` v2)
 - **Google Chrome** installato (consigliato) oppure il Chromium di Playwright
-- macOS / Linux / Windows
-
-> ⚠️ Sul tuo sistema `npx` risulta rotto: usa sempre gli script **`npm run ...`** (che risolvono i
-> binari locali), mai `npx`.
+- macOS o Linux (su Windows manca l'installazione del servizio; il resto funziona)
 
 ## Installazione
 
-```bash
-npm install
-npm run browser:install      # scarica Chromium (fallback se non usi Chrome)
-cp .env.example .env         # poi adatta i valori se vuoi
-```
-
-## 1) Avvia la dashboard
+La repo è privata: serve accesso in lettura su GitHub.
 
 ```bash
-npm start
+npm install -g "git+ssh://git@github.com/matteolegrottaglie/Linkedin-Sequencer-MCP.git"
 ```
 
-Apri **http://127.0.0.1:4310**
+Poi la configurazione iniziale:
 
-## 2) Login (una sola volta) — dal tab «Account»
+```bash
+lksq setup
+```
 
-Nel tab **Account** (il primo) premi **«Accedi a LinkedIn con Google»**: si apre la finestra del browser
-controllata dal tool. Lì scegli **«Continua con Google»** e accedi normalmente (anche 2FA). Quando la
-dashboard mostra **«Connesso»** sei pronto. La sessione resta salvata in `data/browser-profile/`.
+Crea `~/.linkedin-sequencer-mcp/`, genera il token di accesso, verifica il browser e stampa i
+prossimi passi. Se non hai Chrome:
 
-Dalle volte successive il tool si **riconnette da solo all'avvio** (auto-connect): vedrai «Connesso»
-senza fare nulla. Per disattivarlo: `AUTO_CONNECT=false` nel `.env`.
+```bash
+npx playwright install chromium
+```
 
-> **Sicurezza:** il login lo fai *tu* nella finestra reale del browser. Il tool non vede né memorizza la
-> tua password: usa solo la sessione del browser. (Mai incollare credenziali Google in form di terzi —
-> verrebbe anche bloccato dall'anti-bot di Google.)
->
-> In alternativa, da terminale e **a dashboard spenta**: `npm run login`.
+## Collegare il client MCP
 
-## 3) Usa il tool
+Avvia il daemon e chiedi la configurazione:
 
-1. **Account** → connettiti a LinkedIn (vedi sopra).
-2. **Contatti** → importa il CSV (vedi formato sotto).
-2. **Sicurezza** → controlla rampa, orari, tetti. I default sono prudenti per account FREE.
-3. **Campagne** → crea una sequenza, poi **"Iscrivi tutti i contatti"** e mettila in **Avvia**.
-4. In alto premi **▶ Avvia** per far partire l'engine. Si apre il browser e inizia a lavorare,
-   **solo dentro la finestra oraria** e dentro i limiti.
-5. Guarda **Log live** e i KPI (inviti oggi / 7gg, pendenti, acceptance).
+```bash
+lksq daemon start && lksq mcp-config
+```
 
-### Sequenza consigliata (sicura, account FREE)
-`Visita profilo → Attesa 1 giorno → Collegati (senza nota) → Attendi accettazione (14g) → Messaggio personalizzato`
+**Claude Code**
 
-La nota personalizzata si mette nel **primo messaggio dopo l'accettazione**, non nella richiesta
-(così eviti il taglio a ~5 inviti/settimana degli account FREE).
+```bash
+claude mcp add --transport http linkedin-sequencer http://127.0.0.1:4311/mcp --header "Authorization: Bearer IL_TUO_TOKEN"
+```
+
+**Codex** — in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.linkedin_sequencer]
+url = "http://127.0.0.1:4311/mcp"
+bearer_token_env_var = "LKSQ_TOKEN"
+```
+
+`lksq mcp-config` stampa entrambe le righe già compilate con il tuo token.
+
+> Il token vive in `~/.linkedin-sequencer-mcp/token` con permessi `0600`. Non condividerlo:
+> chi ce l'ha può mandare inviti e messaggi a tuo nome.
+
+## Uso, da chat
+
+**1. Accedi a LinkedIn** (una volta sola)
+
+> «accedi a LinkedIn»
+
+Si apre una finestra di Chrome sulla pagina di login: accedi normalmente, anche con Google e 2FA.
+Il tool non vede né salva la password — conserva solo la sessione del browser, in locale.
+Dalle volte successive risulti già connesso.
+
+**2. Importa la lista e parti**
+
+> «importa ~/Desktop/contatti.csv e comincia a mandare le richieste di collegamento;
+> dopo che accettano scrivi: "Ciao {firstName}, grazie del collegamento!"»
+
+**3. Controlla come sta andando**
+
+> «a che punto siamo?» · «quanti inviti ho mandato questa settimana?» · «com'è l'acceptance rate?»
+
+**4. Frena o fermati**
+
+> «abbassa a 8 inviti al giorno» · «metti in pausa» · «ferma tutto»
+
+### Perché è così lento
+
+Una azione alla volta, 40 secondi–3 minuti di pausa fra una e l'altra, pause lunghe ogni 6–12
+azioni, e solo dentro la finestra oraria (default lun–ven 9–18). **La lentezza è la protezione**:
+raffiche e attività notturna sono i segnali di bot più facili da rilevare. Una lista di 200
+contatti richiede settimane, non ore.
+
+## Far avanzare le campagne a client chiuso
+
+Le sequenze durano giorni (attesa di accettazione, rampa di warm-up). Perché avanzino anche
+quando chiudi Claude Code, installa il daemon come servizio dell'utente:
+
+```bash
+lksq service install
+```
+
+Su macOS crea un LaunchAgent, su Linux una systemd user unit. Il servizio avvia anche il motore
+all'accesso: si aprirà una finestra del browser e le campagne procederanno da sole, sempre dentro
+finestra oraria, rampa e tetti. Con `--no-autostart` tiene acceso solo il server MCP.
+
+```bash
+lksq service uninstall   # per tornare indietro
+```
 
 ---
 
 ## Formato CSV
 
-Colonne riconosciute (intestazioni IT/EN, case-insensitive). Solo `profile_url` è obbligatoria.
+Serve almeno la colonna con l'URL del profilo. Intestazioni riconosciute in italiano e inglese,
+senza distinzione di maiuscole.
 
 ```csv
-profile_url,first_name,last_name,company,headline
-https://www.linkedin.com/in/mario-rossi/,Mario,Rossi,Acme,CEO @ Acme
-https://www.linkedin.com/in/giulia-bianchi/,Giulia,Bianchi,Beta Srl,CTO
+profile_url,nome,cognome,azienda,qualifica,settore
+https://www.linkedin.com/in/mario-rossi/,Mario,Rossi,Acme,CEO @ Acme,Manifattura
+linkedin.com/in/giulia-bianchi,Giulia,Bianchi,Beta Srl,CTO,Software
 ```
 
-Qualsiasi colonna extra diventa `custom.NOME_COLONNA`, usabile nei template.
+| Campo | Intestazioni accettate |
+|---|---|
+| URL profilo *(obbligatorio)* | `profile_url`, `url`, `linkedin`, `linkedin url`, `profilo`, `profile`, `link` |
+| Nome | `first_name`, `firstname`, `nome` |
+| Cognome | `last_name`, `lastname`, `cognome` |
+| Nome completo | `full_name`, `name`, `nominativo` |
+| Azienda | `company`, `azienda`, `organizzazione` |
+| Qualifica | `headline`, `titolo`, `qualifica`, `ruolo`, `title` |
+| Località | `location`, `località`, `city`, `città` |
+| Email | `email`, `e-mail`, `mail` |
 
-### Template messaggi / note
+Qualsiasi altra colonna diventa `{custom.NOME_COLONNA}`, usabile nei template.
+
+> Se una riga contiene solo uno *slug* (`mario-rossi`) invece di un URL, viene ricostruita come
+> profilo ma segnalata nel risultato dell'import: controlla che sia un profilo vero, perché un
+> refuso in quella colonna passerebbe altrimenti inosservato.
+
+### Template dei messaggi
+
 - Placeholder: `{firstName}` `{lastName}` `{fullName}` `{company}` `{headline}` `{location}` `{custom.NOME}`
 - **Spintax** (variazione anti-pattern): `{Ciao|Salve|Buongiorno} {firstName}!`
 
+Messaggi identici inviati in massa sono uno dei segnali di bot più forti: usa lo spintax.
+
 ---
 
-## Pannello Sicurezza — cosa fa il controller
+## La sequenza consigliata (e perché)
 
-- **Rampa**: inviti/giorno per settimana di warm-up (default: 12 → 16 → 18 → 20 → 22 → 25).
-- **Tetto settimanale**: limite "duro" che non viene mai superato (default 100). Alzalo solo col tempo.
+```
+visita profilo → attesa 1 giorno → collegati SENZA nota → attendi accettazione (14g) → primo messaggio
+```
+
+La nota personalizzata **non va nell'invito**: sugli account free ne hai solo 5 al mese.
+La personalizzazione vive nel **primo messaggio dopo l'accettazione**, dove non costa nulla.
+
+È la sequenza che `create_campaign` e `start_connection_campaign` usano di default.
+
+## Il controller di sicurezza
+
+- **Rampa**: inviti/giorno per settimana di warm-up (default 12 → 16 → 18 → 20 → 22 → 25).
+- **Tetto settimanale**: limite duro che non viene mai superato (default 100).
 - **Acceptance rate**: se scende sotto la soglia (default 40%) il controller **riduce** gli inviti.
-- **Backoff**: su "limite settimanale"/warning sospende gli inviti e abbassa il tetto; su
-  **captcha/restrizione** va in **HALT** totale (devi intervenire su LinkedIn e premere
-  "⚠ Riprendi sicurezza").
+- **Backoff**: su "limite settimanale" o warning sospende gli inviti e abbassa il tetto.
+- **HALT**: su captcha o restrizione si ferma del tutto. Sopravvive ai riavvii: devi risolvere
+  la segnalazione su LinkedIn e solo dopo azzerarlo. È voluto.
 - **Recupero**: dopo N giorni "puliti" rialza gradualmente i limiti.
 - **Auto-withdraw**: ritira gli inviti pendenti troppo vecchi per tenere sano il backlog.
 
+Tutto leggibile e modificabile da chat con `get_safety_settings` / `update_safety_settings`.
+
 ---
 
-## Struttura del progetto
+## Tool MCP
+
+| Gruppo | Tool |
+|---|---|
+| Autenticazione | `linkedin_auth_status` · `linkedin_login` · `linkedin_logout` |
+| Contatti | `import_contacts` · `list_contacts` · `delete_contacts` |
+| Campagne | `create_campaign` · `list_campaigns` · `get_campaign` · `update_campaign` · `set_campaign_status` · `delete_campaign` · `enroll_contacts` |
+| Motore | `engine_status` · `engine_control` |
+| Sicurezza | `get_safety_settings` · `update_safety_settings` |
+| Metriche | `get_metrics` · `get_recent_actions` · `get_signals` |
+| Percorso rapido | `start_connection_campaign` |
+
+## Comandi `lksq`
+
+```bash
+lksq setup                       # configurazione iniziale
+lksq daemon start|stop|status    # daemon in background
+lksq start                       # daemon in primo piano
+lksq logs -f                     # segui il log
+lksq login                       # login da terminale (a daemon fermo)
+lksq mcp-config                  # configurazione per Claude Code e Codex
+lksq service install|uninstall   # esecuzione non presidiata
+lksq doctor                      # diagnosi dell'installazione
+```
+
+## Dove stanno i dati
+
+Tutto in `~/.linkedin-sequencer-mcp/` (o in `LKSQ_DATA_DIR`):
+
+```
+sequencer.db       contatti, campagne, azioni, segnali, impostazioni
+browser-profile/   sessione LinkedIn (è il tuo login: trattalo come una password)
+token              token bearer dell'endpoint MCP (0600)
+screenshots/       schermate salvate quando un'azione fallisce
+daemon.log
+```
+
+Nessuno di questi file lascia mai il tuo computer.
+
+### Vieni dal progetto originale?
+
+Se hai già una sessione LinkedIn e un database nella vecchia cartella `data/`, puntaci
+`LKSQ_DATA_DIR` invece di ricominciare da capo:
+
+```bash
+export LKSQ_DATA_DIR="$HOME/Progetti/Linkedin Sequencer/data"
+lksq doctor
+```
+
+Ritrovi login, contatti, campagne e storico delle azioni. Lo schema del database è lo stesso.
+
+---
+
+## Architettura
+
+```
+lksq start
+  └─ daemon (un processo)
+       ├─ SQLite            contatti, campagne, azioni, impostazioni
+       ├─ Engine            worker loop: una azione alla volta, con ritardi umani
+       ├─ Playwright        Chrome reale, profilo persistente
+       └─ MCPServer         http://127.0.0.1:4311/mcp   (mcp-use v2, Streamable HTTP)
+```
+
+Un **daemon** e non un server MCP effimero perché le campagne durano giorni e Playwright
+blocca il profilo browser a un solo processo: login, motore e tool devono vivere insieme.
+`mcp-use` v2 non offre il transport stdio, ma sia Claude Code sia Codex parlano Streamable HTTP.
 
 ```
 src/
-  config.ts            config infrastruttura + default di sicurezza
-  types.ts             tipi condivisi
-  db/                  SQLite (schema, connessione, query)
-  util/                rand (umano), time (fuso/finestra), log
-  safety/controller.ts Adaptive Limit Controller (cuore anti-ban)
+  cli.ts               comando `lksq`
+  daemon.ts            processo daemon
+  config.ts            percorsi, porta, token, default di sicurezza
+  mcp/                 server MCP: istruzioni, schemi zod, tool
+  service/             logica applicativa condivisa dai tool
+  safety/controller.ts controller adattivo (cuore anti-ban)
+  sequencer/engine.ts  worker loop
   browser/             sessione persistente, stealth, comportamento umano
   linkedin/            selettori (FRAGILI), guardie, azioni Playwright
-  sequencer/           template, engine (worker loop)
-  importer/csv.ts      import CSV
-  server/              Fastify: API + SSE
-  cli/login.ts         login manuale
-  main.ts              entrypoint dashboard
-public/                dashboard (HTML/CSS/JS, no build)
-data/                  DB, profilo browser, screenshot (gitignored)
+  db/  importer/  util/  platform/
+scripts/               strumenti di manutenzione dei selettori (vedi sotto)
+skills/                playbook installabile come skill di Claude Code
+test/                  node:test, logica pura senza browser
 ```
 
 ## Quando qualcosa si rompe (selettori)
 
-LinkedIn cambia spesso il DOM. Se un'azione fallisce, l'engine salva uno **screenshot** in
-`data/screenshots/` (visibile anche via `http://127.0.0.1:4310/screenshots/<file>.png`). Quasi sempre
-basta aggiornare **un solo file**: `src/linkedin/selectors.ts`.
+È **la** manutenzione ricorrente di questo progetto: LinkedIn cambia il DOM e i selettori
+smettono di agganciare. Se un'azione fallisce, l'engine salva uno **screenshot** e il percorso
+compare in `get_recent_actions`, insieme all'elenco degli `aria-label` che ha visto in pagina.
 
-## Comandi
+### Come sono fatti i selettori, e perché
+
+Riscritti il 2026-08-20 dopo probing del DOM dal vivo, e verificati sul campo con invii reali.
+Due cose da sapere prima di toccarli:
+
+- **Non si seleziona per ruolo.** I controlli della top-card non sono `<button>`: "Connect" è un
+  `<a>` con `aria-label="Invite <Nome> to connect"` e senza `role="button"`. La vecchia
+  `getByRole('button', { name: /^connect$/ })` restituiva zero risultati — era il bug.
+- **Ogni selettore è ancorato ai token del nome della persona.** La sidebar "More profiles for
+  you" ha i suoi "Connect": senza ancoraggio si finisce per invitare qualcun altro. Se il nome
+  non è ricavabile, il tool **non clicca niente** e riporta il fallimento.
+
+Altre due invarianti che sembrano dettagli e non lo sono: mai `click({ force: true })` (clicca
+alle coordinate e con la top-nav sticky sovrapposta colpisce il banner "Claim Premium Page",
+portando al checkout Premium — è successo davvero); e dopo ogni click si verifica di non essere
+finiti su una pagina Premium/checkout, nel qual caso ci si ferma.
+
+### Il ciclo di riparazione
 
 ```bash
-npm start             # avvia la dashboard
-npm run dev           # dashboard con auto-reload
-npm run login         # login manuale (a dashboard spenta)
-npm run typecheck     # controllo dei tipi
-npm run browser:install
+# 1. guarda com'è fatta la pagina adesso, su profili veri
+npx tsx scripts/probe-targets.ts targets.json
+
+# 2. correggi src/linkedin/selectors.ts
+
+# 3. verifica la logica su DOM sintetico (niente rete, niente account)
+npm run test:selectors
+
+# 4. prova un invio reale isolato, fuori dall'engine
+npx tsx scripts/connect-no-note.ts targets.json 0
+```
+
+`scripts/selectors-fixture-test.ts` blocca le regressioni già viste (il Connect della sidebar,
+il banner Premium sticky, la "Send" nascosta che rubava il match). Va rilanciato ogni volta che
+si tocca `selectors.ts`. Un fixture verde non garantisce che la UI vera sia ancora così: quello
+lo dice solo il passo 1.
+
+## Sviluppo
+
+```bash
+npm install
+npm run typecheck
+npm test               # logica pura: template, CSV, controller di sicurezza
+npm run test:selectors # selettori su DOM sintetico (serve un browser)
+npm run build
+npm run dev            # daemon in primo piano
+```
+
+Se `npm run test:selectors` non trova il browser di Playwright, puoi puntarlo a Chrome:
+
+```bash
+PW_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:selectors
+```
+
+Per lavorare senza toccare i dati veri:
+
+```bash
+LKSQ_DATA_DIR=/tmp/lksq-dev LKSQ_PORT=4399 npm run dev
 ```
 
 ## Disclaimer
 
-Strumento educativo/personale. L'uso viola i Termini di LinkedIn e può causare la sospensione del tuo
-account. L'autore/utilizzatore se ne assume ogni responsabilità. Usa volumi bassi, gradualità e buon
-senso.
+Strumento personale ed educativo. L'uso viola i Termini di LinkedIn e può causare la sospensione
+del tuo account. Chi lo distribuisce e chi lo usa se ne assumono ogni responsabilità.
+Volumi bassi, gradualità, buon senso.

@@ -19,8 +19,9 @@ export interface DetectedSignal {
 export async function detectGuards(page: Page): Promise<DetectedSignal | null> {
   const url = page.url();
 
-  // 1) Captcha / security checkpoint (dall'URL: il più affidabile)
-  if (/checkpoint\/challenge|\/checkpoint\/lg|\/captcha|add-phone|two-step/i.test(url)) {
+  // 1) Captcha / security checkpoint (dall'URL: il più affidabile).
+  //    Qualsiasi /checkpoint/ vale: challenge, challengesV2, lg, ...
+  if (/\/checkpoint\/|\/captcha|add-phone|two-step/i.test(url)) {
     return { kind: 'captcha', severity: 3, detail: `checkpoint url: ${url}` };
   }
 
@@ -42,6 +43,19 @@ export async function detectGuards(page: Page): Promise<DetectedSignal | null> {
     )
   ) {
     return { kind: 'restriction', severity: 3, detail: 'account limitato/sospeso' };
+  }
+  // Verifica del dispositivo / 2FA: LinkedIn chiede di approvare
+  // l'accesso dall'app o di inserire un codice. NON è sempre servita
+  // su un URL /checkpoint/ — può comparire come interstiziale sulla
+  // stessa pagina, e senza questo controllo passava inosservata
+  // producendo una banale azione 'failed' invece di un blocco.
+  // Serve intervento umano: severità 3 come il captcha (-> HALT).
+  if (
+    /(controlla la tua app linkedin|check your linkedin app|apri l'app linkedin|open your linkedin app|approva (questo )?accesso|approve (this )?sign[- ]?in|verifica in due passaggi|two[- ]step verification|inserisci il codice|enter the (\d+[- ]digit )?code|codice di verifica|verification code|verifica del dispositivo|device verification|conferma la tua identità|confirm your identity|verifica che sei tu|verify it'?s you|let'?s do a quick)/i.test(
+      text,
+    )
+  ) {
+    return { kind: 'captcha', severity: 3, detail: 'verifica dispositivo/2FA richiesta (approva su app o inserisci codice)' };
   }
   if (/(verifica di sicurezza|security verification|conferma di essere un|are you a human|completa questa verifica)/i.test(text)) {
     return { kind: 'captcha', severity: 3, detail: 'verifica di sicurezza richiesta' };

@@ -8,7 +8,7 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { appConfig } from '../config.js';
+import { appConfig, paths } from '../config.js';
 import { applyStealth } from './stealth.js';
 import { log } from '../util/log.js';
 import { sleep } from '../util/time.js';
@@ -23,7 +23,7 @@ export class LinkedInSession {
 
   async launch(): Promise<void> {
     if (this.context) return;
-    const userDataDir = join(appConfig.dataDir, 'browser-profile');
+    const userDataDir = paths.browserProfile;
     mkdirSync(userDataDir, { recursive: true });
 
     this.context = await chromium.launchPersistentContext(userDataDir, {
@@ -168,7 +168,7 @@ export class LinkedInSession {
   async screenshot(name: string): Promise<string | undefined> {
     const page = this.page;
     if (!page) return undefined;
-    const dir = join(appConfig.dataDir, 'screenshots');
+    const dir = paths.screenshots;
     mkdirSync(dir, { recursive: true });
     const path = join(dir, `${name}-${Date.now()}.png`);
     await page.screenshot({ path, fullPage: false }).catch(() => {});

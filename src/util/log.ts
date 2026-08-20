@@ -10,7 +10,7 @@ export const log = pino({
   transport: {
     target: 'pino-pretty',
     options: {
-      colorize: true,
+      colorize: process.stdout.isTTY === true,
       translateTime: 'SYS:HH:MM:ss',
       ignore: 'pid,hostname',
     },
