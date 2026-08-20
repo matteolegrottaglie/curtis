@@ -1,41 +1,198 @@
-# LinkedIn Sequencer MCP
+# Curtis
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.22.2-brightgreen.svg)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/protocol-MCP-8A2BE2.svg)](https://modelcontextprotocol.io)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
 
-An **MCP server** that runs LinkedIn outreach **from your own machine**, driven entirely from
-chat in Claude Code, Codex, or any MCP client.
+**Curtis runs your LinkedIn outreach from your own machine, at the pace you would run it
+yourself — and keeps running it after you have stopped paying attention.**
 
-You log into LinkedIn once, hand it a list of contacts, and it sends connection requests —
-slowly, inside working hours, behind a warm-up ramp and a closed-loop controller that slows
-itself down when LinkedIn shows signs of irritation.
-
-No LinkedIn API, no OAuth token, no password handling: it drives a **real Chrome window** with
-Playwright, using your own session and your own IP.
+He is an [MCP](https://modelcontextprotocol.io) server, so you talk to him from chat in Claude
+Code, Codex, or any MCP client. You log into LinkedIn once, in a real browser window. You hand
+him a list. He works through it over the following weeks: one profile at a time, inside working
+hours, behind a warm-up ramp, slowing himself down when the numbers say to.
 
 ```
-you:     "import ~/contacts.csv and start sending connection requests"
-Claude:  → import_contacts → create_campaign → enroll_contacts → engine_control start
-         "Campaign created: 180 contacts. Up to 12 invites/day, Mon–Fri 9–18."
+you:     "import ~/prospects.csv and start reaching out"
+Curtis:  → import_contacts → create_campaign → enroll_contacts → engine_control start
+         "Campaign created: 180 contacts. Up to 12 invites/day, Mon–Fri 9–18.
+          At this pace the list takes about six weeks."
+
+...three days later...
+
+you:     "how's it going?"
+Curtis:  "96 invites sent, 47 accepted (49%), 3 replies. Acceptance rate is healthy,
+          so tomorrow the ramp moves to 16/day. Two profiles failed — both already
+          1st-degree connections."
 ```
+
+No LinkedIn API, no OAuth, no password handed to anyone. Curtis drives a real Chrome window with
+Playwright, using your session and your IP.
 
 ---
 
-## ⚠️ Read this first
+## Contents
 
-This section is not boilerplate. Read it before you install anything.
+- [Why Curtis exists](#why-curtis-exists)
+- [What Curtis actually does](#what-curtis-actually-does)
+- [A month with Curtis](#a-month-with-curtis)
+- [Who this is for](#who-this-is-for)
+- [What Curtis will not do](#what-curtis-will-not-do)
+- [Read this before installing](#read-this-before-installing)
+- [Install](#install) · [Connect your MCP client](#connect-your-mcp-client) · [Usage](#usage-from-chat)
+- [How it works](#how-it-works) · [CSV format](#csv-format) · [The safety controller](#the-safety-controller)
+- [Reference](#mcp-tools) · [Architecture](#architecture) · [Development](#development)
+
+---
+
+## Why Curtis exists
+
+Outreach that works is not complicated. You find someone worth talking to, you connect, you wait,
+and once they accept you say something that could only have been written to them. Each of those
+steps takes about thirty seconds.
+
+The problem is never the thirty seconds. It is thirty seconds times two hundred people, spread
+across six weeks, where the part that actually converts — the message *after* they accept — lands
+days later, on a day when you are busy with something else. Personal outreach does not fail
+because it is hard. It fails because it is boring, and because nobody keeps a six-week routine
+alive by willpower. Almost everyone stops in week two.
+
+So people reach for a growth tool, and hit the other failure mode. Those tools solve the
+persistence problem by removing the person: a few hundred invitations a week, from a data-centre
+IP, with one template. That produces two results at once. LinkedIn notices — it names
+"using automation tools to send invitations" as a trigger for restricting an account — and the
+recipients notice too, which is why those campaigns run at single-digit acceptance rates. You end
+up with a damaged account *and* nothing to show for it.
+
+Both failure modes come from treating outreach as a volume problem. It is not. It is a
+persistence problem wearing a volume problem's clothes.
+
+Curtis is the third option. He does exactly the work you would do by hand, at roughly the speed
+you would do it, from your own computer — and he is still doing it in week six.
+
+## What Curtis actually does
+
+**He works as you, not as a service.** There is no account to create and no integration to
+authorise. Curtis opens the Chrome that is already on your machine, you log in by hand once — 2FA
+and Google SSO both work fine — and from then on he reuses that session. Same browser, same
+fingerprint, same home IP as when you browse LinkedIn yourself. Your credentials are never seen,
+typed, or stored by anything but you and Chrome.
+
+**He is slow, and the slowness is the product.** One action at a time, forty seconds to three
+minutes between actions, a longer break every six to twelve actions, and only inside the window
+you configure — Monday to Friday, 9 to 18, by default. A list of two hundred contacts takes
+weeks, not an afternoon. That is not a limitation Curtis works around; it is the entire design.
+Bursts and 3 a.m. activity are the cheapest signals to detect, and they are also what makes
+outreach feel like outreach to the person receiving it.
+
+**He watches the number that matters and brakes himself.** The volume knob is not the interesting
+one; the acceptance rate is. When it falls below your threshold, Curtis reduces the daily target
+on his own, because a low acceptance rate means the list or the message is wrong, and sending
+*more* of a message people ignore is precisely the behaviour that gets accounts restricted. If
+LinkedIn shows a captcha or a restriction notice, he stops completely and stays stopped across
+restarts until you tell him the situation is resolved.
+
+**He keeps going when you are not there.** Installed as a user service, Curtis runs in the
+background, survives you closing your editor, and keeps advancing sequences that are measured in
+days. This is the part that is genuinely hard to replicate by hand: not the sending, the
+remembering.
+
+**He never takes over your screen.** After the login there is no window. Curtis works in the
+background while you use your computer normally — no Chrome popping to the foreground, no cursor
+moving on its own, no session you are afraid to touch.
+
+## A month with Curtis
+
+Concretely, on a 180-contact list with the default settings.
+
+**Day 1.** You export a list — from a search, a CSV your CRM produced, a conference attendee
+sheet — and say *"import ~/prospects.csv and start reaching out; after they accept, write:
+`{Hi|Hello} {firstName}, saw you're building at {company} — curious how you're handling X`"*.
+Curtis reports what he parsed: 180 rows, 176 valid, 4 with a broken URL, and 2 where the URL was
+rebuilt from a bare name and is worth double-checking. He shows you the message rendered against
+three real people from your own list, not a made-up example, so you can see it reads like
+something a human wrote. Then he starts.
+
+**Days 1–5, week one.** Twelve invitations a day, scattered irregularly across the working
+window. Each contact gets their profile visited a day before the request, because that is what a
+person does. No note attached to the invitation — free accounts get only five personalised notes
+per *month*, and spending them on invitations is a bad trade when the same personalisation is
+free in the first message.
+
+**Day 3.** The first acceptances arrive. Curtis notices them on his next pass and sends the first
+message to those people only — a message written for them, with spintax varying the opening so
+that two hundred recipients do not receive two hundred byte-identical strings.
+
+**Week two.** Acceptance rate is 49%. The ramp moves to 16 a day. You have not touched anything.
+
+**Week three.** Acceptance drops to 31%. Curtis cuts the daily target without asking, logs why,
+and tells you when you next check in: the problem is the targeting or the message, and more
+volume would make it worse. You fix the list. He goes back up.
+
+**Week four.** Invitations still pending after 21 days are withdrawn automatically, to keep the
+pending backlog from becoming its own risk. You ask *"how are we doing"* and get real numbers:
+invitations out, acceptance rate over a rolling window, the funnel from visit to reply, and any
+signals LinkedIn has shown.
+
+At no point in that month did you open LinkedIn to do outreach. At no point did Curtis do
+anything you would not have done yourself, in an order you would not have chosen.
+
+## Who this is for
+
+Curtis is built for people **whose LinkedIn account is personally theirs and personally
+valuable**:
+
+- **Founders and solo sellers** doing their own outreach, in their own name, where twenty good
+  conversations beat two thousand invitations and the reply rate is the only metric that pays.
+- **People building a network or looking for work** — reaching hiring managers, people in a field
+  you are moving into, alumni. Low volume, high personalisation, and an account you cannot afford
+  to have restricted, because it is your CV.
+
+What those have in common: a restriction is not an inconvenience to be absorbed by rotating to
+another seat. It is your professional identity. Curtis is conservative because the person running
+him cannot be reckless.
+
+He is **not** built for agencies running outreach across client accounts at volume, for anyone
+who wants five hundred invitations a week, or for running unattended in the cloud. If that is the
+job, the honest answer is that a different tool fits it better — and that the risk profile is
+different from the one Curtis is designed around.
+
+## What Curtis will not do
+
+The refusals are as much the product as the features:
+
+- **No cloud.** Curtis cannot run without your machine awake. That is a real limitation and it is
+  also the reason LinkedIn sees your ordinary browser from your ordinary IP.
+- **No note in the invitation** by default. Five per month on a free account is a budget, and it
+  belongs in the first message where it costs nothing.
+- **No silent limit-raising.** Curtis will lower his own limits on his own. Raising them always
+  requires you to say so, after being told what it means.
+- **No "unlimited" mode.** The weekly ceiling is a hard stop, not a suggestion, and the HALT on a
+  captcha or restriction survives restarts by design — clearing it is a deliberate act, not a
+  retry.
+- **No contact database.** Curtis works on a list you already have and have a legitimate reason
+  to contact. He does not scrape one for you.
+- **No telemetry.** No analytics, no phone-home, no network call to anything but LinkedIn itself.
+  Nothing about your contacts or your campaigns leaves your computer.
+- **No promises about not getting banned.** See the next section, which you should read before
+  installing anything.
+
+---
+
+## Read this before installing
+
+> ⚠️ **This section is not boilerplate.** Read it before you install anything.
 
 - **Automating LinkedIn violates its User Agreement** (§8.2 forbids "bots or other automated
   methods to access the Services, add or download contacts, send or redirect messages").
   Penalties range from a temporary restriction to a **permanent ban**.
-- **Nobody can guarantee you won't get banned** — not even the paid tools. This project
-  *reduces* the risk through low volume and human pacing. It does not eliminate it.
-- **Be sceptical of the numbers you find online.** "100–200 invites/week", "75/day",
-  "recovery under 15%" are figures from automation-vendor blogs with no primary source.
-  **LinkedIn publishes no numeric invite limit**, weekly or total-pending, and states that it
-  cannot show you how much headroom you have left. Do not build your safety margin on them.
+- **Nobody can guarantee you won't get restricted** — not Curtis, not the paid tools. Low volume
+  and human pacing *reduce* the risk. They do not remove it.
+- **Be sceptical of the numbers you find online.** "100–200 invites/week", "75/day", "recovery
+  under 15%" are figures from automation-vendor blogs with no primary source. **LinkedIn
+  publishes no numeric invite limit**, weekly or total-pending, and states it cannot show you how
+  much headroom you have left. Do not build your safety margin on them.
 
 ### What LinkedIn actually says (primary sources)
 
@@ -51,11 +208,11 @@ This section is not boilerplate. Read it before you install anything.
   Premium). That cap is **monthly**, not weekly.
 - The network limit remains **30,000 first-degree connections**.
 
-The ceilings this tool ships with (`weeklyInviteCeiling`, `caps`, the ramp) are **deliberate
+The ceilings Curtis ships with (`weeklyInviteCeiling`, `caps`, the ramp) are **deliberate
 caution**, not known LinkedIn thresholds. The signal worth watching is your **acceptance rate**,
 not a number from a blog post.
 
-Use it responsibly, on **your own** account, at your own risk. See [DISCLAIMER](#disclaimer).
+Use it responsibly, on **your own** account, at your own risk. See [Disclaimer](#disclaimer).
 
 ---
 
@@ -70,17 +227,17 @@ Use it responsibly, on **your own** account, at your own risk. See [DISCLAIMER](
 ## Install
 
 ```bash
-npm install -g "git+https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP.git"
+npm install -g "git+https://github.com/matteolegrottaglie/curtis.git"
 ```
 
 Then run the initial setup:
 
 ```bash
-lksq setup
+curtis setup
 ```
 
-This creates `~/.linkedin-sequencer-mcp/`, generates the access token, verifies your browser and
-prints the next steps. If you don't have Chrome installed:
+This creates `~/.curtis/`, generates the access token, verifies your browser and prints the next
+steps. If you don't have Chrome installed:
 
 ```bash
 npx playwright install chromium
@@ -91,27 +248,27 @@ npx playwright install chromium
 Start the daemon and ask for the configuration line:
 
 ```bash
-lksq daemon start && lksq mcp-config
+curtis daemon start && curtis mcp-config
 ```
 
 **Claude Code**
 
 ```bash
-claude mcp add --transport http linkedin-sequencer http://127.0.0.1:4311/mcp --header "Authorization: Bearer YOUR_TOKEN"
+claude mcp add --transport http curtis http://127.0.0.1:4311/mcp --header "Authorization: Bearer YOUR_TOKEN"
 ```
 
 **Codex** — in `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.linkedin_sequencer]
+[mcp_servers.curtis]
 url = "http://127.0.0.1:4311/mcp"
-bearer_token_env_var = "LKSQ_TOKEN"
+bearer_token_env_var = "CURTIS_TOKEN"
 ```
 
-`lksq mcp-config` prints both lines already filled in with your token.
+`curtis mcp-config` prints both lines already filled in with your token.
 
-> The token lives in `~/.linkedin-sequencer-mcp/token` with mode `0600`. Do not share it:
-> whoever holds it can send invites and messages as you.
+> The token lives in `~/.curtis/token` with mode `0600`. Do not share it: whoever holds it can
+> send invites and messages as you.
 
 ## Usage, from chat
 
@@ -120,16 +277,16 @@ bearer_token_env_var = "LKSQ_TOKEN"
 > "log into LinkedIn"
 
 A Chrome window opens on the login page. Sign in normally — Google SSO and 2FA both work. This is
-the only moment you see the browser: once you're in, the window closes and from then on the tool
-works in the background. It never sees or stores your password — only the browser session, kept
+the only moment you see the browser: once you are in, the window closes and Curtis works in the
+background from then on. He never sees or stores your password, only the browser session, kept
 locally. On later runs you are already signed in.
 
-**2. Import your list and go**
+**2. Import your list and start**
 
-> "import ~/Desktop/contacts.csv and start sending connection requests;
+> "import ~/Desktop/prospects.csv and start reaching out;
 > once they accept, write: 'Hi {firstName}, thanks for connecting!'"
 
-**3. Check on it**
+**3. Check in**
 
 > "where are we?" · "how many invites went out this week?" · "what's the acceptance rate?"
 
@@ -144,37 +301,37 @@ locally. On later runs you are already signed in.
 ### Slow on purpose
 
 One action at a time, 40 s – 3 min of pause between actions, long breaks every 6–12 actions, and
-only inside the configured window (default Mon–Fri, 9–18). **The slowness is the protection**:
-bursts and overnight activity are the easiest bot signals to detect. A 200-contact list takes
-weeks, not hours.
+only inside the configured window (default Mon–Fri, 9–18). A 200-contact list takes weeks, not
+hours.
 
 ### You don't see the browser
 
-The tool works in the background: no window popping up or moving while you're doing something
-else. The one time you see Chrome is the login, because you type the credentials yourself.
+Curtis works in the background: no window appearing or moving while you are doing something else.
+The one time you see Chrome is the login, because you type the credentials yourself.
 
-This is not the old, easily-detected headless mode — and the difference is worth explaining,
-because the whole design rests on it:
+This is not plain headless mode, and the difference is worth explaining because the whole design
+rests on it:
 
 - it drives **system Chrome**, not an automation Chromium, so the reported WebGL renderer is your
   actual GPU;
-- the **User-Agent is stripped** of the `Headless` marker, HTTP headers and client hints included;
-- **real display values** (colour depth) are observed during login and replayed in the background.
+- the **User-Agent is cleaned** of the `Headless` marker, HTTP headers and client hints included;
+- **real display values** (colour depth) are read during login and reused in the background.
 
-Measured across the signals an anti-bot checks first — `navigator.webdriver`, plugins, languages,
-User-Agent, client hints, WebGL renderer, colour depth, window dimensions — the background
-fingerprint after first login is **identical** to the windowed one.
+Measured across `navigator.webdriver`, plugins, languages, User-Agent, client hints, WebGL
+renderer, colour depth and window dimensions, the background browser after first login behaves
+identically to the windowed one. The two modes are interchangeable, which is what makes running
+without a window safe to do by default.
 
-If you want to watch anyway, `HEADFUL=true` brings the window back. That's mostly useful when a
+If you want to watch anyway, `HEADFUL=true` brings the window back. That is mostly useful when a
 selector stops matching and you need to look at the page yourself.
 
 ### Keeping campaigns moving with the client closed
 
-Sequences run for days (waiting for acceptance, warm-up ramp). So they keep advancing after you
-close Claude Code, install the daemon as a user service:
+Sequences run for days. So they keep advancing after you close Claude Code, install the daemon as
+a user service:
 
 ```bash
-lksq service install
+curtis service install
 ```
 
 On macOS this creates a LaunchAgent, on Linux a systemd user unit. The service also starts the
@@ -182,7 +339,7 @@ engine at login, so campaigns proceed on their own — always inside the time wi
 ceilings. `--no-autostart` keeps only the MCP server running.
 
 ```bash
-lksq service uninstall   # to undo
+curtis service uninstall   # to undo
 ```
 
 ---
@@ -209,7 +366,8 @@ linkedin.com/in/john-smith,John,Smith,Beta Ltd,CTO,Software
 | Location | `location`, `city`, `località`, `città` |
 | Email | `email`, `e-mail`, `mail` |
 
-Any other column becomes `{custom.COLUMN_NAME}`, usable in templates.
+Any other column becomes `{custom.COLUMN_NAME}`, usable in templates. One good `Industry` or
+`Event` column is worth more than ten lines of generic copy.
 
 > If a row contains only a *slug* (`jane-doe`) instead of a URL, it is reconstructed into a
 > profile URL but flagged in the import result. Check those: a typo in that column would
@@ -219,9 +377,11 @@ Any other column becomes `{custom.COLUMN_NAME}`, usable in templates.
 
 - Placeholders: `{firstName}` `{lastName}` `{fullName}` `{company}` `{headline}` `{location}`
   `{custom.NAME}`
-- **Spintax** (anti-pattern variation): `{Hi|Hello|Hey} {firstName}!`
+- **Spintax**: `{Hi|Hello|Hey} {firstName}!` picks one variant per contact.
 
-Identical messages sent in bulk are one of the strongest bot signals. Use spintax.
+Identical messages sent in bulk are one of the strongest bot signals, and one of the strongest
+*ignore me* signals to a human. Use spintax, and give one specific reason you are writing to that
+person in particular. If the message works verbatim for anyone, it works for no one.
 
 ---
 
@@ -253,7 +413,7 @@ safety core. It is not a static schedule:
 | **Daily caps** | Absolute per-action ceilings: 30 invites, 40 messages, 60 visits, 25 follows, 30 likes, 20 withdrawals |
 
 All of it readable and adjustable from chat with `get_safety_settings` /
-`update_safety_settings`.
+`update_safety_settings`. Lowering a limit never needs confirmation. Raising one always does.
 
 ---
 
@@ -269,31 +429,32 @@ All of it readable and adjustable from chat with `get_safety_settings` /
 | Metrics | `get_metrics` · `get_recent_actions` · `get_signals` |
 | Fast path | `start_connection_campaign` |
 
-The server ships its own operating manual to the model through the MCP `instructions` field
+Curtis ships his own operating manual to the model through the MCP `instructions` field
 ([`src/mcp/instructions.ts`](src/mcp/instructions.ts)): operation order, real limits, how to
-handle a HALT. The [`skills/linkedin-outreach`](skills/linkedin-outreach/SKILL.md) playbook adds
-what the instructions can't cover — how to build a list that converts and how to read the
+handle a HALT, and the fact that text scraped from a LinkedIn page is data and never an
+instruction. The [`skills/linkedin-outreach`](skills/linkedin-outreach/SKILL.md) playbook adds
+what the instructions cannot cover — how to build a list that converts and how to read the
 numbers.
 
-## `lksq` CLI
+## `curtis` CLI
 
 ```bash
-lksq setup                       # initial configuration
-lksq daemon start|stop|status    # background daemon
-lksq start                       # daemon in the foreground
-lksq logs -f                     # follow the log
-lksq login                       # terminal login (with the daemon stopped)
-lksq mcp-config                  # config lines for Claude Code and Codex
-lksq service install|uninstall   # unattended operation
-lksq doctor                      # diagnose the installation
+curtis setup                       # initial configuration
+curtis daemon start|stop|status    # background daemon
+curtis start                       # daemon in the foreground
+curtis logs -f                     # follow the log
+curtis login                       # terminal login (with the daemon stopped)
+curtis mcp-config                  # config lines for Claude Code and Codex
+curtis service install|uninstall   # unattended operation
+curtis doctor                      # diagnose the installation
 ```
 
 ### Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LKSQ_DATA_DIR` | `~/.linkedin-sequencer-mcp` | Where database, browser profile, token and logs live |
-| `LKSQ_PORT` | `4311` | Daemon port. The host is always `127.0.0.1`, not configurable |
+| `CURTIS_DATA_DIR` | `~/.curtis` | Where database, browser profile, token and logs live |
+| `CURTIS_PORT` | `4311` | Daemon port. The host is always `127.0.0.1`, not configurable |
 | `TIMEZONE` | `Europe/Rome` | IANA zone for the working-hours window |
 | `LOG_LEVEL` | `info` | `trace` · `debug` · `info` · `warn` · `error` · `silent` |
 | `BROWSER_CHANNEL` | auto | `chrome` for system Chrome, `chromium` to force Playwright's |
@@ -301,12 +462,17 @@ lksq doctor                      # diagnose the installation
 | `AUTO_CONNECT` | `true` | Reopen the saved LinkedIn session on daemon start |
 | `AUTOSTART_ENGINE` | `false` | Start the engine with the daemon (what the service sets) |
 
-Optional values can also go in `<LKSQ_DATA_DIR>/.env` — see [`.env.example`](.env.example).
+Optional values can also go in `<CURTIS_DATA_DIR>/.env` — see [`.env.example`](.env.example).
 Environment variables always win over the file.
+
+> **Coming from LinkedIn Sequencer?** Curtis is the same project, renamed. `lksq` still works as
+> a command, `LKSQ_*` variables are still read, and an existing `~/.linkedin-sequencer-mcp` keeps
+> being used as the data directory — your session, contacts and history carry over with no
+> migration. `curtis doctor` tells you which directory is in use.
 
 ## Where your data lives
 
-Everything under `~/.linkedin-sequencer-mcp/` (or `LKSQ_DATA_DIR`):
+Everything under `~/.curtis/` (or `CURTIS_DATA_DIR`), owner-only (`0700`):
 
 ```
 sequencer.db       contacts, campaigns, actions, signals, settings
@@ -316,15 +482,14 @@ screenshots/       captured when an action fails
 daemon.log
 ```
 
-None of these files ever leaves your computer. There is no telemetry, no analytics, and no
-network call to anything but LinkedIn itself.
+None of it ever leaves your computer.
 
 ---
 
 ## Architecture
 
 ```
-lksq start
+curtis start
   └─ daemon (one process)
        ├─ SQLite            contacts, campaigns, actions, settings
        ├─ Engine            worker loop: one action at a time, human delays
@@ -338,14 +503,14 @@ locks the browser profile to a single process: login, engine and tools have to l
 
 ```
 src/
-  cli.ts               the `lksq` command
+  cli.ts               the `curtis` command
   daemon.ts            daemon process
   config.ts            paths, port, token, safety defaults
   mcp/                 MCP server: instructions, zod schemas, tools
   service/             application logic shared by the tools
   safety/controller.ts adaptive rate controller (safety core)
   sequencer/engine.ts  worker loop
-  browser/             persistent session, stealth, human behaviour
+  browser/             persistent session, background mode, human behaviour
   linkedin/            selectors (FRAGILE), guards, Playwright actions
   db/  importer/  util/  platform/
 scripts/               selector maintenance tooling (see below)
@@ -361,20 +526,25 @@ When an action fails the engine saves a **screenshot** whose path shows up in
 
 ### How the selectors are built, and why
 
-Rewritten on 2026-08-20 after probing the live DOM, and verified in the field with real sends.
-Two things to know before touching them:
+Rewritten after probing the live DOM, and verified in the field with real sends. Two things to
+know before touching them:
 
 - **Do not select by role.** The top-card controls are not `<button>`s: "Connect" is an `<a>` with
   `aria-label="Invite <Name> to connect"` and no `role="button"`. The old
   `getByRole('button', { name: /^connect$/ })` returned zero matches — that was the bug.
 - **Every selector is anchored to the person's name tokens.** The "More profiles for you" sidebar
   has its own "Connect" buttons; without anchoring you end up inviting someone else. If the name
-  can't be derived, the tool **clicks nothing** and reports the failure.
+  can't be derived, Curtis **clicks nothing** and reports the failure.
 
 Two more invariants that look like details and are not: never `click({ force: true })` (it clicks
 by coordinates, and with the sticky top-nav overlapping it hits the "Claim Premium Page" banner
 and lands you in Premium checkout — this actually happened); and after every click the tool
 verifies it hasn't ended up on a Premium/checkout page, stopping if it has.
+
+The `RX` table in [`src/linkedin/selectors.ts`](src/linkedin/selectors.ts) carries English **and**
+Italian alternatives, because LinkedIn renders its UI in the account's language. Those Italian
+strings are load-bearing: removing them blinds the tool on Italian accounts, silently, with every
+test still green.
 
 ### The repair loop
 
@@ -396,6 +566,9 @@ the sticky Premium banner, the hidden "Send" that stole the match). Re-run it ev
 touch `selectors.ts`. A green fixture does not prove the live UI still looks like that — only
 step 1 tells you that.
 
+> **Step 4 sends real connection requests** to whoever is in `targets.json`, outside the engine
+> and outside its counters. Point it at one profile you are happy to invite.
+>
 > `targets.json` is a local file of real profile URLs used for probing. It is git-ignored and
 > must stay that way: it contains third parties' personal data.
 
@@ -419,7 +592,7 @@ PW_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run te
 To work without touching your real data:
 
 ```bash
-LKSQ_DATA_DIR=/tmp/lksq-dev LKSQ_PORT=4399 npm run dev
+CURTIS_DATA_DIR=/tmp/curtis-dev CURTIS_PORT=4399 npm run dev
 ```
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Selector fixes are the most
@@ -428,12 +601,13 @@ valuable kind.
 ## Security
 
 The MCP endpoint listens on loopback only and is protected by a bearer token, because reaching it
-means being able to act on your LinkedIn account. To report a vulnerability, see
-[SECURITY.md](SECURITY.md).
+means being able to act on your LinkedIn account. Text scraped from LinkedIn pages is treated as
+untrusted data on its way into a model's context. The threat model, the design decisions behind
+it and how to report a vulnerability are in [SECURITY.md](SECURITY.md).
 
 ## Disclaimer
 
-This is a personal, educational project. Using it violates LinkedIn's Terms of Service and may
+Curtis is a personal, educational project. Using it violates LinkedIn's Terms of Service and may
 get your account restricted or permanently banned. It is provided **as is**, with no warranty of
 any kind: the authors accept no liability for any consequence of its use, and anyone who
 distributes or runs it assumes full responsibility.
