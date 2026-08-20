@@ -7,7 +7,12 @@
 //    This is not the old "trivially detectable headless": it uses the
 //    system Chrome, rewrites the User-Agent to drop "Headless" and
 //    replays the real display's values (see stealth.ts). Measured:
-//    the only difference left from the visible browser was colorDepth.
+//    webdriver, plugins, languages, UA (JS + HTTP header), Sec-CH-UA,
+//    WebGL renderer, colorDepth and innerWidth/Height all match the
+//    visible browser once colorDepth is replayed. What does NOT match
+//    is outerWidth/outerHeight (1440x900 background vs 1420x786
+//    windowed) and screenX/Y: Playwright's viewport emulation decouples
+//    the window from its own viewport, differently in each mode.
 //  - MANUAL login (2FA/checkpoint included): we never handle passwords.
 // ============================================================
 import { chromium, type BrowserContext, type Page } from 'playwright';

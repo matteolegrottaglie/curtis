@@ -12,7 +12,7 @@
 //  LinkedIn Sequencer before it was called Curtis, and an install
 //  that predates the rename must keep working untouched.
 // ============================================================
-import { readFileSync, existsSync, mkdirSync, writeFileSync, chmodSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, chmodSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -50,14 +50,35 @@ function resolveDataDir(): string {
   const override = env('DATA_DIR');
   if (override) return expandHome(override);
   const current = join(homedir(), '.curtis');
-  if (!existsSync(current) && existsSync(LEGACY_DATA_DIR)) return LEGACY_DATA_DIR;
+  // An *empty* ~/.curtis must not win over a populated pre-rename directory:
+  // it is created by anything that so much as touches the path (a stray
+  // `mkdir`, a run with CURTIS_DATA_DIR pointed here, a backup tool), and
+  // letting its bare existence decide would produce exactly the "everything is
+  // gone" screen this fallback exists to prevent. To move to ~/.curtis on
+  // purpose, copy the old directory across or point CURTIS_DATA_DIR at the new
+  // one — an override always wins.
+  if (existsSync(LEGACY_DATA_DIR) && !hasContents(current)) return LEGACY_DATA_DIR;
   return current;
+}
+
+/** True when `dir` exists, is a directory, and is not empty. */
+function hasContents(dir: string): boolean {
+  try {
+    return readdirSync(dir).length > 0;
+  } catch {
+    return false; // missing, or not a directory
+  }
 }
 
 export const DATA_DIR: string = resolveDataDir();
 
-/** True when running against a data directory that predates the rename. */
-export const USING_LEGACY_DATA_DIR = DATA_DIR === LEGACY_DATA_DIR && !env('DATA_DIR');
+/**
+ * True when running against a data directory that predates the rename —
+ * whether it was picked up by the fallback or named outright. A pre-rename
+ * install commonly has `LKSQ_DATA_DIR` exported in a shell profile, and the
+ * directory is no less the old one for having been asked for by name.
+ */
+export const USING_LEGACY_DATA_DIR = DATA_DIR === LEGACY_DATA_DIR;
 
 // --- mini .env parser (no dependencies) ---
 function loadDotEnv(dir: string): void {

@@ -63,9 +63,23 @@ function removeLegacyService(): string[] {
   return steps;
 }
 
+/**
+ * Path of the service file that is actually on disk, current name first.
+ *
+ * Callers that want to *show* the user where the service lives must use this
+ * and not `servicePath()`: on an install that predates the rename only the
+ * legacy file exists, and printing the `com.curtis` path would name a file
+ * that is not there while hiding the one that is actually running.
+ */
+export function installedServicePath(): string | null {
+  if (existsSync(servicePath())) return servicePath();
+  if (existsSync(legacyServicePath())) return legacyServicePath();
+  return null;
+}
+
 /** True if a service is registered under either the current or the old name. */
 export function isServiceInstalled(): boolean {
-  return existsSync(servicePath()) || existsSync(legacyServicePath());
+  return installedServicePath() !== null;
 }
 
 function xmlEscape(s: string): string {
@@ -178,23 +192,29 @@ export function installService(t: ServiceTarget): string[] {
 export function uninstallService(): string[] {
   const target = servicePath();
   const steps: string[] = removeLegacyService();
+  // Decided before the unregister commands run, because they do not tell us
+  // whether there was anything to unregister: launchctl and systemctl both
+  // fail silently here on purpose.
+  const hadCurrent = existsSync(target);
 
   if (process.platform === 'darwin') {
     const uid = process.getuid?.() ?? 501;
     run('/bin/launchctl', ['bootout', `gui/${uid}/${SERVICE_LABEL}`]);
     run('/bin/launchctl', ['unload', '-w', target]);
-    steps.push('Service unloaded');
+    if (hadCurrent) steps.push('Service unloaded');
   } else if (process.platform === 'linux') {
     run('systemctl', ['--user', 'disable', '--now', SYSTEMD_UNIT]);
     run('systemctl', ['--user', 'daemon-reload']);
-    steps.push('Service disabled');
+    if (hadCurrent) steps.push('Service disabled');
   }
 
-  if (existsSync(target)) {
+  if (hadCurrent) {
     rmSync(target, { force: true });
     steps.push(`Removed ${target}`);
-  } else if (steps.length === 0) {
-    steps.push('No service file to remove');
   }
+  // Only now: "unloaded" must not be reported for a service that was never
+  // installed, and the honest message has to survive removeLegacyService()
+  // having pushed nothing.
+  if (steps.length === 0) steps.push('No service file to remove');
   return steps;
 }

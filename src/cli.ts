@@ -29,7 +29,7 @@ import {
   USING_LEGACY_DATA_DIR,
 } from './config.js';
 import { VERSION } from './version.js';
-import { installService, isServiceInstalled, servicePath, uninstallService } from './platform/service.js';
+import { installService, installedServicePath, legacyServicePath, uninstallService } from './platform/service.js';
 
 const CLI_PATH = fileURLToPath(import.meta.url);
 const MIN_NODE = [22, 22, 2] as const;
@@ -253,7 +253,7 @@ async function cmdDaemonStatus(): Promise<void> {
   console.log(dim(`  data:  ${appConfig.dataDir}`));
   console.log(dim(`  log:   ${paths.logFile}`));
   console.log(
-    dim(`  service: ${isServiceInstalled() ? `installed (${servicePath()})` : 'not installed'}`),
+    dim(`  service: ${installedServicePath() ? `installed (${installedServicePath()})` : 'not installed'}`),
   );
 }
 
@@ -405,10 +405,17 @@ async function cmdDoctor(): Promise<void> {
     detail: h.ok ? `running on ${mcpUrl()}${pid ? ` (pid ${pid})` : ''}` : `stopped — start it with \`curtis daemon start\``,
   });
 
+  // The path shown is the file that is actually on disk. On an install made
+  // before the rename that is still the com.linkedin-sequencer-mcp one, and
+  // naming the com.curtis path instead would point at a file that is not there
+  // while hiding the service that is really running.
+  const svc = installedServicePath();
   checks.push({
     label: 'Service',
     ok: true,
-    detail: isServiceInstalled() ? servicePath() : 'not installed (campaigns only advance while the daemon is up)',
+    detail: svc
+      ? `${svc}${svc === legacyServicePath() ? ' — pre-rename service, `curtis service install` migrates it' : ''}`
+      : 'not installed (campaigns only advance while the daemon is up)',
   });
 
   console.log(`\n${bold(`Curtis v${VERSION}`)}\n`);
@@ -441,7 +448,12 @@ async function cmdService(args: string[]): Promise<void> {
     for (const s of uninstallService()) console.log(`  ${green('✓')} ${s}`);
     console.log();
   } else if (sub === 'status') {
-    console.log(isServiceInstalled() ? `installed: ${servicePath()}` : 'not installed');
+    const path = installedServicePath();
+    console.log(
+      path
+        ? `installed: ${path}${path === legacyServicePath() ? ' (pre-rename; `curtis service install` migrates it)' : ''}`
+        : 'not installed',
+    );
   } else {
     console.error('Usage: curtis service install [--no-autostart] | uninstall | status');
     process.exit(1);
