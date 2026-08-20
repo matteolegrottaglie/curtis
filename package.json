@@ -3,8 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Server MCP che automatizza LinkedIn dal tuo computer: login, import di una lista di contatti e invio graduale delle richieste di collegamento, comandato interamente da chat (Claude Code, Codex).",
-  "license": "UNLICENSED",
+  "description": "MCP server that runs LinkedIn outreach from your own machine: login, contact import and gradual connection requests, driven entirely from chat (Claude Code, Codex).",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "linkedin",
+    "outreach",
+    "automation",
+    "playwright",
+    "claude-code",
+    "codex",
+    "sequencer"
+  ],
+  "license": "MIT",
+  "author": "Matteo Legrottaglie",
+  "homepage": "https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP/issues"
+  },
   "engines": {
     "node": ">=22.22.2"
   },
@@ -14,7 +34,8 @@
   "files": [
     "dist",
     "skills",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

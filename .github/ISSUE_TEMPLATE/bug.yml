@@ -1,0 +1,66 @@
+name: Bug report
+description: Something else doesn't work — setup, daemon, CLI, MCP tools, database
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For an action that fails on **every** contact, use the *Selector broken* template
+        instead. For a security issue, do **not** open an issue — see
+        [SECURITY.md](https://github.com/matteolegrottaglie/Linkedin-Sequencer-MCP/blob/main/SECURITY.md).
+
+        ⚠️ **Never paste your token, session data, or real contacts.** `lksq doctor` output is
+        safe; `lksq mcp-config` output is **not** — it contains your token.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. lksq daemon start
+        2. from chat: "import ~/list.csv"
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `lksq doctor`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: From `lksq logs -n100`. Redact anything personal.
+      render: text
+
+  - type: input
+    id: env
+    attributes:
+      label: OS, Node, MCP client
+      placeholder: "macOS 15.6, Node 22.22.2, Claude Code"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I did not include my bearer token or any session data
+          required: true
+        - label: I removed real names, profile URLs and companies
+          required: true

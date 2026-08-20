@@ -443,8 +443,9 @@ ${bold('Variabili d\'ambiente')}
   LKSQ_PORT       porta del daemon (default 4311)
   LKSQ_NO_AUTH=1  disattiva il token sull'endpoint MCP (solo debug)
   TIMEZONE        fuso della finestra oraria (default Europe/Rome)
-  BROWSER_CHANNEL 'chrome' per usare Chrome di sistema, vuoto per Chromium
-  HEADFUL         'false' per browser nascosto (sconsigliato: più rilevabile)
+  BROWSER_CHANNEL 'chrome' per usare Chrome di sistema, 'chromium' per quello di Playwright
+  HEADFUL         'true' per tenere visibile la finestra (default: lavora in background)
+  LOG_LEVEL       trace | debug | info | warn | error | silent (default info)
 `);
 }
 

@@ -1,0 +1,76 @@
+name: Selector broken
+description: An action fails on every contact — LinkedIn changed the DOM
+title: "[selectors] "
+labels: ["selectors", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before filing:** a failure on *one* contact is usually normal (already connected,
+        out of network, profile removed). This template is for the same action failing on
+        **every** contact — that means the UI changed.
+
+        ⚠️ **Redact real people.** Do not paste real names, profile URLs, company names, or
+        un-redacted screenshots. Replace them with `<Name>`, `<Company>`, etc.
+
+  - type: dropdown
+    id: action
+    attributes:
+      label: Which action fails
+      options:
+        - connect
+        - message
+        - visit
+        - follow
+        - like
+        - check_accepted
+        - withdraw
+    validations:
+      required: true
+
+  - type: textarea
+    id: recent-actions
+    attributes:
+      label: Output of get_recent_actions
+      description: >
+        Ask your MCP client for `get_recent_actions`. The failure detail includes the
+        `aria-label`s the tool actually saw on the page — that is the key evidence.
+        Redact names before pasting.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: dom
+    attributes:
+      label: What the page looks like now
+      description: >
+        Output of `npx tsx scripts/probe-targets.ts targets.json`, or the relevant DOM
+        snippet from DevTools. Redact names.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `lksq version`
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: OS, Node, browser
+      placeholder: "macOS 15.6, Node 22.22.2, system Chrome 141"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: It fails on **every** contact, not just one
+          required: true
+        - label: I removed all real names, URLs and companies from what I pasted
+          required: true

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      # `npm ci` runs `prepare`, which builds. Skip it here so a type error
+      # surfaces from `typecheck` with a readable message instead of mid-install.
+      - run: npm ci --ignore-scripts
+
+      - run: npm rebuild better-sqlite3
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
