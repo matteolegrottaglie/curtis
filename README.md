@@ -47,7 +47,6 @@ Playwright, using your session and your IP.
 **The idea**
 [Why Curtis exists](#why-curtis-exists) ·
 [What Curtis actually does](#what-curtis-actually-does) ·
-[A month with Curtis](#a-month-with-curtis) ·
 [Who this is for](#who-this-is-for) ·
 [What Curtis will not do](#what-curtis-will-not-do) ·
 [Read this before installing](#read-this-before-installing)
@@ -133,52 +132,6 @@ remembering.
 **He never takes over your screen.** After the login there is no window. Curtis works in the
 background while you use your computer normally — no Chrome popping to the foreground, no cursor
 moving on its own, no session you are afraid to touch.
-
-## A month with Curtis
-
-Concretely, on a 350-contact list with the default settings. The ramp sends 12 invitations a day
-in week one, 16 in week two, 18 in week three and 20 in week four — 330 over four working weeks,
-which is why a list this size is roughly a month of sending.
-
-**Day 1.** You export a list — from a search, a CSV your CRM produced, a conference attendee
-sheet — and say *"import ~/prospects.csv and start reaching out; after they accept, write:
-`{Hi|Hello} {firstName}, saw you're building at {company} — curious how you're handling X`"*.
-Curtis reports what he parsed: 350 rows, 344 valid, 6 with a broken URL, and 2 where the URL was
-rebuilt from a bare name and is worth double-checking, plus a preview of the first three contacts
-he actually loaded. Install the [`linkedin-outreach`](skills/linkedin-outreach/SKILL.md) playbook
-as a skill and the model will also render your message against those three real people before
-enrolling anyone, so you can see it reads like something a human wrote. Then he starts.
-
-**Days 1–5, week one.** Twelve invitations a day, scattered irregularly across the working
-window. Each contact gets their profile visited a day before the request, because that is what a
-person does. No note attached to the invitation — free accounts get only five personalised notes
-per *month*, and spending them on invitations is a bad trade when the same personalisation is
-free in the first message.
-
-**Day 4.** The first acceptances arrive. Curtis notices them on his next pass and sends the first
-message to those people only — a message written for them, with spintax varying the opening so
-that three hundred recipients do not receive three hundred byte-identical strings.
-
-**Week two.** Acceptance rate is 49%. The ramp moves to 16 a day. You have not touched anything.
-
-**Week three.** Acceptance drops to 31%. Curtis cuts the daily target without asking, logs why,
-and tells you when you next check in: the problem is the targeting or the message, and more
-volume would make it worse. You cut the weakest third of the list and rewrite the opener. Three
-clean days later he starts climbing back.
-
-**From day 15.** Invitations still pending when the *wait for acceptance* step runs out — 14 days
-after the request, with the default sequence — are withdrawn automatically, to keep the pending
-backlog from becoming its own risk. Remember you cannot re-invite that person for about three
-weeks afterwards.
-
-**Week four.** The last of the list goes out at 20 a day, while the first messages to people who
-accepted in week three are still being sent — the two phases overlap for most of the month. You
-ask *"how are we doing"* and get real numbers: invitations out, acceptance rate over a rolling
-window, the funnel from visit to reply, and any signals LinkedIn has shown.
-
-At no point in that month did you open LinkedIn to do outreach. At no point did Curtis do
-anything you would not have done yourself, in an order you would not have chosen. What he
-supplied was not speed — it was showing up on day 23.
 
 ## Who this is for
 
@@ -293,17 +246,6 @@ clean prefix with an empty npm cache, **23 seconds**.
 > `Cannot cd into …/node_modules/fast-safe-stringify`, or `spawn sh ENOENT` on
 > better-sqlite3's install script, a different one each run. The same URL *without* `-g`
 > works, and other packages install fine *with* `-g`: it is this combination.
-
-> **Upgrading from LinkedIn Sequencer?** Remove the old package first:
->
-> ```bash
-> npm uninstall -g linkedin-sequencer-mcp
-> ```
->
-> The package was renamed, so npm sees two different packages both claiming the `lksq`
-> command and aborts the install with `EEXIST: file already exists … bin/lksq`, leaving the
-> old version in place. Uninstalling only removes the program; `~/.linkedin-sequencer-mcp`
-> — session, contacts, history — is untouched and is picked up again after the install.
 
 Then run the initial setup:
 
@@ -553,14 +495,6 @@ curtis version                     # what the issue templates ask for
 
 Optional values can also go in `<CURTIS_DATA_DIR>/.env` — see [`.env.example`](.env.example).
 Environment variables always win over the file.
-
-> **Coming from LinkedIn Sequencer?** Curtis is the same project, renamed. `lksq` still works as
-> a command, `LKSQ_*` variables are still read, and an existing `~/.linkedin-sequencer-mcp` keeps
-> being used as the data directory — your session, contacts and history carry over with no
-> migration. `curtis doctor` tells you which directory is in use. The one manual step is the
-> install itself: run `npm uninstall -g linkedin-sequencer-mcp` before installing Curtis, or npm
-> refuses to take over the `lksq` command. If you had the daemon running as a service, re-run
-> `curtis service install` — it unregisters the pre-rename one on the way.
 
 ## Where your data lives
 
