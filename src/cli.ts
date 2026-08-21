@@ -26,10 +26,9 @@ import {
   getAuthToken,
   mcpUrl,
   paths,
-  USING_LEGACY_DATA_DIR,
 } from './config.js';
 import { VERSION } from './version.js';
-import { installService, installedServicePath, legacyServicePath, uninstallService } from './platform/service.js';
+import { installService, installedServicePath, uninstallService } from './platform/service.js';
 
 const CLI_PATH = fileURLToPath(import.meta.url);
 const MIN_NODE = [22, 22, 2] as const;
@@ -351,13 +350,10 @@ async function cmdDoctor(): Promise<void> {
     // does not throw when it fails. Report what is actually on disk: a "✓" on
     // a world-readable data directory is worse than no check at all.
     const permProblem = dataDirPermissionProblem();
-    // Say which directory is in use when it is the pre-rename one: otherwise
-    // "why is Curtis writing to .linkedin-sequencer-mcp?" is a puzzle.
-    const legacyNote = USING_LEGACY_DATA_DIR ? ' — pre-rename directory, still in use on purpose' : '';
     checks.push({
       label: 'Data directory',
       ok: permProblem === null,
-      detail: permProblem ?? `${appConfig.dataDir} (0700, owner only)${legacyNote}`,
+      detail: permProblem ?? `${appConfig.dataDir} (0700, owner only)`,
     });
   } catch (e) {
     checks.push({ label: 'Data directory', ok: false, detail: String(e) });
@@ -405,17 +401,11 @@ async function cmdDoctor(): Promise<void> {
     detail: h.ok ? `running on ${mcpUrl()}${pid ? ` (pid ${pid})` : ''}` : `stopped — start it with \`curtis daemon start\``,
   });
 
-  // The path shown is the file that is actually on disk. On an install made
-  // before the rename that is still the com.linkedin-sequencer-mcp one, and
-  // naming the com.curtis path instead would point at a file that is not there
-  // while hiding the service that is really running.
   const svc = installedServicePath();
   checks.push({
     label: 'Service',
     ok: true,
-    detail: svc
-      ? `${svc}${svc === legacyServicePath() ? ' — pre-rename service, `curtis service install` migrates it' : ''}`
-      : 'not installed (campaigns only advance while the daemon is up)',
+    detail: svc ?? 'not installed (campaigns only advance while the daemon is up)',
   });
 
   console.log(`\n${bold(`Curtis v${VERSION}`)}\n`);
@@ -449,11 +439,7 @@ async function cmdService(args: string[]): Promise<void> {
     console.log();
   } else if (sub === 'status') {
     const path = installedServicePath();
-    console.log(
-      path
-        ? `installed: ${path}${path === legacyServicePath() ? ' (pre-rename; `curtis service install` migrates it)' : ''}`
-        : 'not installed',
-    );
+    console.log(path ? `installed: ${path}` : 'not installed');
   } else {
     console.error('Usage: curtis service install [--no-autostart] | uninstall | status');
     process.exit(1);
@@ -485,10 +471,6 @@ ${bold('Environment variables')}
   BROWSER_CHANNEL    'chrome' for the system Chrome, 'chromium' for Playwright's
   HEADFUL            'true' keeps the browser window visible (default: background)
   LOG_LEVEL          trace | debug | info | warn | error | silent (default info)
-
-${dim("Curtis used to be called LinkedIn Sequencer. `lksq` still works as an alias,")}
-${dim("the LKSQ_* variables are still read, and an existing ~/.linkedin-sequencer-mcp")}
-${dim("keeps being used as the data directory.")}
 `);
 }
 

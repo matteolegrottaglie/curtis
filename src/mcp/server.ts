@@ -79,9 +79,7 @@ export function buildMcpServer(engine: Engine): MCPServer {
     const header = c.req.header('authorization') ?? '';
     const given = header.toLowerCase().startsWith('bearer ')
       ? header.slice(7).trim()
-      : // `x-lksq-token` was the header before the rename: a client configured
-        // against the old name must not start getting 401s.
-        (c.req.header('x-curtis-token') ?? c.req.header('x-lksq-token') ?? '');
+      : (c.req.header('x-curtis-token') ?? '');
     if (!given || !tokenMatches(given, token)) {
       return c.json({ error: 'unauthorized', hint: 'run `curtis mcp-config` to get the token' }, 401);
     }

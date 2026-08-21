@@ -16,13 +16,6 @@ import { appConfig, paths } from '../config.js';
 export const SERVICE_LABEL = 'com.curtis';
 const SYSTEMD_UNIT = 'curtis.service';
 
-// Names used before the project was renamed to Curtis. An install that predates
-// the rename has a service registered under these, and writing the new one
-// without clearing the old leaves two daemons fighting over the same browser
-// profile — which Playwright locks to a single process.
-const LEGACY_SERVICE_LABEL = 'com.linkedin-sequencer-mcp';
-const LEGACY_SYSTEMD_UNIT = 'linkedin-sequencer-mcp.service';
-
 export interface ServiceTarget {
   /** Node executable to use (the one the CLI is currently running under). */
   nodePath: string;
@@ -38,46 +31,12 @@ export function servicePath(): string {
     : join(homedir(), '.config', 'systemd', 'user', SYSTEMD_UNIT);
 }
 
-/** Where the pre-rename service file would be, if one was ever installed. */
-export function legacyServicePath(): string {
-  return process.platform === 'darwin'
-    ? join(homedir(), 'Library', 'LaunchAgents', `${LEGACY_SERVICE_LABEL}.plist`)
-    : join(homedir(), '.config', 'systemd', 'user', LEGACY_SYSTEMD_UNIT);
-}
-
-/** Unregisters and deletes a pre-rename service, if present. Returns what it did. */
-function removeLegacyService(): string[] {
-  const legacy = legacyServicePath();
-  if (!existsSync(legacy)) return [];
-  const steps: string[] = [];
-  if (process.platform === 'darwin') {
-    const uid = process.getuid?.() ?? 501;
-    run('/bin/launchctl', ['bootout', `gui/${uid}/${LEGACY_SERVICE_LABEL}`]);
-    run('/bin/launchctl', ['unload', '-w', legacy]);
-  } else if (process.platform === 'linux') {
-    run('systemctl', ['--user', 'disable', '--now', LEGACY_SYSTEMD_UNIT]);
-    run('systemctl', ['--user', 'daemon-reload']);
-  }
-  rmSync(legacy, { force: true });
-  steps.push(`Removed the pre-rename service (${legacy})`);
-  return steps;
-}
-
-/**
- * Path of the service file that is actually on disk, current name first.
- *
- * Callers that want to *show* the user where the service lives must use this
- * and not `servicePath()`: on an install that predates the rename only the
- * legacy file exists, and printing the `com.curtis` path would name a file
- * that is not there while hiding the one that is actually running.
- */
+/** Path of the service file, when one is actually on disk. */
 export function installedServicePath(): string | null {
-  if (existsSync(servicePath())) return servicePath();
-  if (existsSync(legacyServicePath())) return legacyServicePath();
-  return null;
+  return existsSync(servicePath()) ? servicePath() : null;
 }
 
-/** True if a service is registered under either the current or the old name. */
+/** True if a service is registered. */
 export function isServiceInstalled(): boolean {
   return installedServicePath() !== null;
 }
@@ -163,7 +122,7 @@ function run(cmd: string, args: string[]): { ok: boolean; output: string } {
 export function installService(t: ServiceTarget): string[] {
   const target = servicePath();
   mkdirSync(dirname(target), { recursive: true });
-  const steps: string[] = removeLegacyService();
+  const steps: string[] = [];
 
   if (process.platform === 'darwin') {
     writeFileSync(target, plist(t));
@@ -191,7 +150,7 @@ export function installService(t: ServiceTarget): string[] {
 
 export function uninstallService(): string[] {
   const target = servicePath();
-  const steps: string[] = removeLegacyService();
+  const steps: string[] = [];
   // Decided before the unregister commands run, because they do not tell us
   // whether there was anything to unregister: launchctl and systemctl both
   // fail silently here on purpose.
@@ -212,9 +171,9 @@ export function uninstallService(): string[] {
     rmSync(target, { force: true });
     steps.push(`Removed ${target}`);
   }
-  // Only now: "unloaded" must not be reported for a service that was never
-  // installed, and the honest message has to survive removeLegacyService()
-  // having pushed nothing.
+  // "unloaded" must not be reported for a service that was never installed:
+  // launchctl and systemctl both fail silently above, so an empty step list is
+  // the only thing that says nothing was there.
   if (steps.length === 0) steps.push('No service file to remove');
   return steps;
 }

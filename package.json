@@ -32,8 +32,7 @@
     "node": ">=22.22.2"
   },
   "bin": {
-    "curtis": "dist/cli.js",
-    "lksq": "dist/cli.js"
+    "curtis": "dist/cli.js"
   },
   "files": [
     "dist",
