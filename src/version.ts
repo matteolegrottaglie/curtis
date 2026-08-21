@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const PACKAGE_NAME = 'curtis';
+export const PACKAGE_NAME = 'curtis-mcp';
 
 function readVersion(): string {
   let dir = dirname(fileURLToPath(import.meta.url));

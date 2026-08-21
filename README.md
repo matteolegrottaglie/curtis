@@ -279,19 +279,19 @@ Use it responsibly, on **your own** account, at your own risk. See [Disclaimer](
 ## Install
 
 ```bash
-npm install -g https://github.com/matteolegrottaglie/curtis/releases/download/v0.1.0/curtis-0.1.0.tgz
+npm install -g curtis-mcp
 ```
 
-That is the tarball `npm pack` produces — prebuilt, so nothing compiles on your machine.
-Measured on a clean prefix with an empty npm cache: **24 seconds**.
+The package is `curtis-mcp` — plain `curtis` was already taken on npm — but the command it
+installs is `curtis`. It ships prebuilt, so nothing compiles on your machine.
 
-> **Why not `npm install -g "git+https://…"`?** Because it does not work, and the failure is
-> not yours to debug. npm installs the 120-odd dependencies into the package directory and, on
-> a tree this size, races with its own unpacking: the install dies half-written, with an ENOENT
-> on a dependency directory that vanished under it — `Cannot cd into …/node_modules/`
-> `fast-safe-stringify`, or `spawn sh ENOENT` on better-sqlite3's install script. Which
-> dependency it names changes from run to run. The same URL installed *without* `-g` works, and
-> other packages install fine *with* `-g`: it is this combination. Use the tarball.
+> **Don't install it from the git URL.** `npm install -g "git+https://…"` does not work on this
+> dependency tree, and the failure is not yours to debug: npm puts the 120-odd dependencies
+> inside the package directory and, at that size, races with its own unpacking. The install
+> dies half-written with an ENOENT on a dependency directory that vanished under it —
+> `Cannot cd into …/node_modules/fast-safe-stringify`, or `spawn sh ENOENT` on
+> better-sqlite3's install script, a different one each run. The same URL *without* `-g`
+> works, and other packages install fine *with* `-g`: it is this combination.
 
 > **Upgrading from LinkedIn Sequencer?** Remove the old package first:
 >
@@ -584,7 +584,7 @@ None of it ever leaves your computer.
 ```bash
 curtis service uninstall     # if you installed the service
 curtis daemon stop
-npm uninstall -g curtis
+npm uninstall -g curtis-mcp
 rm -rf ~/.curtis             # deletes the LinkedIn session, contacts and history
 ```
 

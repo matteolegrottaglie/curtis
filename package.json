@@ -1,7 +1,6 @@
 {
-  "name": "curtis",
+  "name": "curtis-mcp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Curtis is an MCP server that runs your LinkedIn outreach from your own machine: it logs in once, works through your contact list, and sends connection requests slowly enough to look like you.",
   "keywords": [
