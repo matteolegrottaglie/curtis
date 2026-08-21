@@ -225,7 +225,7 @@ function warn(msg: string): void {
  * With `CURTIS_NO_AUTH=1` authentication is disabled (debug only).
  */
 export function getAuthToken(): string | null {
-  if (env('NO_AUTH') === '1') return null;
+  if (authDisabled()) return null;
   if (existsSync(paths.token)) {
     const t = readFileSync(paths.token, 'utf8').trim();
     if (t) return t;
@@ -234,6 +234,17 @@ export function getAuthToken(): string | null {
   const token = randomBytes(24).toString('hex');
   writeFileSync(paths.token, `${token}\n`, { mode: 0o600 });
   return token;
+}
+
+/**
+ * True when `CURTIS_NO_AUTH=1` has switched the endpoint's token off.
+ *
+ * Separate from getAuthToken() because that one *writes*: it generates and
+ * saves a token when none exists. A diagnostic asking "is this endpoint
+ * protected?" must be able to answer without creating the answer.
+ */
+export function authDisabled(): boolean {
+  return env('NO_AUTH') === '1';
 }
 
 /** URL of this installation's MCP endpoint. */

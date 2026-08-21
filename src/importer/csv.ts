@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { parse } from 'csv-parse/sync';
 import type { ContactInput } from '../db/repo.js';
+import { sanitizeUntrusted } from '../util/text.js';
 
 // Header alias -> canonical field
 const FIELD_ALIASES: Record<string, string[]> = {
@@ -124,10 +125,16 @@ export function parseCsvBuffer(content: string, source: string): ImportResult {
   records.forEach((rec, i) => {
     const canon: Record<string, string> = {};
     const custom: Record<string, string> = {};
+    // Everything in this file is untrusted: the list is usually somebody
+    // else's, and its cells end up in strings a model reads as if the tool had
+    // written them. A name carrying a newline forges a whole log line in
+    // `get_recent_actions`; a bidi override is invisible and still steers a
+    // prompt. Clean on the way in, once, so nothing downstream has to remember.
     for (const [orig, val] of Object.entries(rec)) {
       const field = headerMap[orig];
-      if (field) canon[field] = val;
-      else if (val && val.trim()) custom[orig.trim()] = val.trim();
+      const clean = sanitizeUntrusted(val);
+      if (field) canon[field] = clean;
+      else if (clean) custom[sanitizeUntrusted(orig)] = clean;
     }
 
     const rawUrl = canon.profile_url ?? '';

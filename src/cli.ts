@@ -23,6 +23,7 @@ import {
   appConfig,
   dataDirPermissionProblem,
   ensureDataDir,
+  authDisabled,
   getAuthToken,
   mcpUrl,
   paths,
@@ -399,6 +400,18 @@ async function cmdDoctor(): Promise<void> {
     label: 'Daemon',
     ok: h.ok,
     detail: h.ok ? `running on ${mcpUrl()}${pid ? ` (pid ${pid})` : ''}` : `stopped — start it with \`curtis daemon start\``,
+  });
+
+  // An endpoint with the token switched off looks exactly like a healthy one
+  // from every other check here, and the only trace is a single warn line in
+  // daemon.log. This is the one setting where silence is the dangerous answer.
+  const noAuth = authDisabled();
+  checks.push({
+    label: 'Authentication',
+    ok: !noAuth,
+    detail: noAuth
+      ? `DISABLED by CURTIS_NO_AUTH=1 — any process on this machine can send invites and messages as you. Unset it (check ${paths.env}) and restart the daemon.`
+      : `bearer token required on ${mcpUrl()}`,
   });
 
   const svc = installedServicePath();

@@ -6,6 +6,7 @@ import type { MCPServer } from 'mcp-use';
 import * as repo from '../../db/repo.js';
 import { getMetrics } from '../../service/metrics.js';
 import { textBlock } from '../result.js';
+import { sanitizeUntrusted } from '../../util/text.js';
 
 export function registerInsightTools(server: MCPServer): void {
   server.tool(
@@ -88,7 +89,8 @@ export function registerInsightTools(server: MCPServer): void {
         type: a.type as string,
         status: a.status as string,
         detail: a.detail,
-        contact_name: a.contact_name,
+        // One action per line below: a newline in a name invents an action.
+        contact_name: sanitizeUntrusted(a.contact_name, 120) || null,
         contact_url: a.contact_url,
         screenshot: a.screenshot,
         created_at: a.created_at,

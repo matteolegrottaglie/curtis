@@ -12,6 +12,7 @@ import { basename } from 'node:path';
 import * as repo from '../db/repo.js';
 import { getDb } from '../db/index.js';
 import { parseCsvBuffer } from '../importer/csv.js';
+import { sanitizeUntrusted } from '../util/text.js';
 import type { Contact } from '../types.js';
 
 /** Upper bound for a CSV, from disk or pasted. A contact list is never this big. */
@@ -114,10 +115,14 @@ function rememberImport(ids: string[]): string {
 }
 
 function toPreview(c: Contact): ContactPreview {
+  // Sanitised here as well as at import: a database filled before the import
+  // path started cleaning still holds whatever the CSV had in it, and this is
+  // the last point before the values reach a model.
+  const name = c.full_name ?? ([c.first_name, c.last_name].filter(Boolean).join(' ') || null);
   return {
     id: c.id,
-    full_name: c.full_name ?? ([c.first_name, c.last_name].filter(Boolean).join(' ') || null),
-    company: c.company,
+    full_name: name ? sanitizeUntrusted(name, 120) : null,
+    company: c.company ? sanitizeUntrusted(c.company, 120) : null,
     profile_url: c.profile_url,
   };
 }

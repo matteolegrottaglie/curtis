@@ -28,6 +28,7 @@
 // ============================================================
 import type { Page, Locator } from 'playwright';
 import type { Contact } from '../types.js';
+import { sanitizeUntrusted } from '../util/text.js';
 
 export const RX = {
   // --- top-card aria-labels --------------------------------------
@@ -237,14 +238,13 @@ export async function probeTopCard(page: Page, tokens: string[], timeoutMs = 15_
  * here before it is written into a detail string.
  *
  * NEVER feed the result back to byExactLabel(): it is lossy on purpose.
+ *
+ * The cleaning itself lives in util/text.ts: a page is not the only untrusted
+ * source that reaches a model — an imported CSV is the other one, and the two
+ * must not drift apart.
  */
 export function sanitizeForLog(label: string | undefined | null, max = 120): string {
-  if (!label) return '';
-  return label
-    .replace(/[\u0000-\u001f\u007f-\u009f]|\p{Cf}/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, max);
+  return sanitizeUntrusted(label, max);
 }
 
 /**
