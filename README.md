@@ -279,8 +279,19 @@ Use it responsibly, on **your own** account, at your own risk. See [Disclaimer](
 ## Install
 
 ```bash
-npm install -g "git+https://github.com/matteolegrottaglie/curtis.git"
+npm install -g https://github.com/matteolegrottaglie/curtis/releases/download/v0.1.0/curtis-0.1.0.tgz
 ```
+
+That is the tarball `npm pack` produces — prebuilt, so nothing compiles on your machine.
+Measured on a clean prefix with an empty npm cache: **24 seconds**.
+
+> **Why not `npm install -g "git+https://…"`?** Because it does not work, and the failure is
+> not yours to debug. npm installs the 120-odd dependencies into the package directory and, on
+> a tree this size, races with its own unpacking: the install dies half-written, with an ENOENT
+> on a dependency directory that vanished under it — `Cannot cd into …/node_modules/`
+> `fast-safe-stringify`, or `spawn sh ENOENT` on better-sqlite3's install script. Which
+> dependency it names changes from run to run. The same URL installed *without* `-g` works, and
+> other packages install fine *with* `-g`: it is this combination. Use the tarball.
 
 > **Upgrading from LinkedIn Sequencer?** Remove the old package first:
 >
